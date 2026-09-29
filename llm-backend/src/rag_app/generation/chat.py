@@ -4,8 +4,9 @@ import hashlib
 import json
 import re
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, TypedDict, cast
 
+from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
 from tokenizers import Tokenizer
 
 from rag_app.api.chat import ChatExecutionResult
@@ -26,6 +27,16 @@ _CITATION_MARKER = re.compile(r"\[S([0-9]+)\]")
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
 
 
+class ChatGraphState(TypedDict):
+    request: ChatRequest
+    history: list[dict[str, str]]
+    candidates: list[EvidenceRecord]
+    selected: list[EvidenceRecord]
+    prompt: str
+    response: ChatResponse | None
+    result: ChatExecutionResult | None
+
+
 class BaselineChatExecutor:
     def __init__(
         self,
@@ -43,8 +54,54 @@ class BaselineChatExecutor:
             - config.max_output_tokens
             - REPAIR_PROMPT_TOKEN_RESERVE
         )
+        graph = cast(Any, StateGraph)(ChatGraphState)
+        graph.add_node("prepare", self._prepare)
+        graph.add_node("retrieve", self._retrieve)
+        graph.add_node("select_evidence", self._select_evidence_node)
+        graph.add_node("insufficient_evidence", self._insufficient_evidence_node)
+        graph.add_node("generate", self._generate)
+        graph.add_node("repair", self._repair)
+        graph.add_node("finalize", self._finalize)
+        graph.add_edge(cast(Any, START), "prepare")
+        graph.add_edge("prepare", "retrieve")
+        graph.add_conditional_edges(
+            "retrieve",
+            self._route_after_retrieval,
+            {
+                "select_evidence": "select_evidence",
+                "insufficient_evidence": "insufficient_evidence",
+            },
+        )
+        graph.add_edge("select_evidence", "generate")
+        graph.add_conditional_edges(
+            "generate",
+            self._route_after_generation,
+            {"repair": "repair", "finalize": "finalize"},
+        )
+        graph.add_edge("repair", "finalize")
+        graph.add_edge("insufficient_evidence", "finalize")
+        graph.add_edge("finalize", cast(Any, END))
+        # Chat and job persistence belong to the application database, not graph checkpoints.
+        self._graph: Any = graph.compile()
 
     async def answer(self, request: ChatRequest) -> ChatExecutionResult:
+        initial_state: ChatGraphState = {
+            "request": request,
+            "history": [],
+            "candidates": [],
+            "selected": [],
+            "prompt": "",
+            "response": None,
+            "result": None,
+        }
+        final_state: ChatGraphState = await self._graph.ainvoke(initial_state)
+        result = final_state["result"]
+        if result is None:
+            raise RuntimeError("Chat graph completed without an execution result")
+        return result
+
+    async def _prepare(self, state: ChatGraphState) -> dict[str, Any]:
+        request = state["request"]
         if self._prompt_limit <= 0:
             raise ServiceError(
                 422,
@@ -58,7 +115,10 @@ class BaselineChatExecutor:
                 "The selected documents use an incompatible embedding configuration.",
             )
 
-        history = self._fit_history(request)
+        return {"history": self._fit_history(request)}
+
+    async def _retrieve(self, state: ChatGraphState) -> dict[str, Any]:
+        request = state["request"]
         query_embedding = await self._provider.embed(EmbeddingInput(texts=[request.question]))
         if query_embedding.dimension != self._config.embedding_dimension:
             raise ProviderProtocolError("Query embedding dimension differs from the active index")
@@ -68,10 +128,19 @@ class BaselineChatExecutor:
             query_embedding.vectors[0],
             self._config,
         )
-        if not candidates:
-            return self._insufficient_evidence(request)
+        return {"candidates": candidates}
 
-        selected, prompt = self._select_evidence(request.question, history, candidates)
+    @staticmethod
+    def _route_after_retrieval(state: ChatGraphState) -> str:
+        return "select_evidence" if state.get("candidates") else "insufficient_evidence"
+
+    def _select_evidence_node(self, state: ChatGraphState) -> dict[str, Any]:
+        request = state["request"]
+        selected, prompt = self._select_evidence(
+            request.question,
+            state["history"],
+            state["candidates"],
+        )
         if not selected:
             raise ServiceError(
                 422,
@@ -79,9 +148,14 @@ class BaselineChatExecutor:
                 "The selected evidence does not fit in the model context.",
             )
 
+        return {"selected": selected, "prompt": prompt}
+
+    async def _generate(self, state: ChatGraphState) -> dict[str, Any]:
+        request = state["request"]
+        selected = state["selected"]
         generation = await self._provider.generate(
             GenerationInput(
-                prompt=prompt,
+                prompt=state["prompt"],
                 context_window_tokens=self._config.context_window_tokens,
                 max_output_tokens=self._config.max_output_tokens,
                 temperature=0,
@@ -90,41 +164,61 @@ class BaselineChatExecutor:
             )
         )
         parsed = self._parse_answer(generation.response, request, selected)
-        if parsed is None:
-            repair_prompt = (
-                f"{prompt}\n\n"
-                'REPAIR: Return only a JSON object with exactly one string field named "answer". '
-                "The answer must be one short sentence, no more than 30 words, grounded in the "
-                "evidence above, and use only exact citation markers from the allowed labels. If "
-                "the evidence cannot answer the question, return "
-                '{"answer":"INSUFFICIENT_EVIDENCE"}. '
-                "Do not include reasoning or commentary."
+        return {"response": parsed} if parsed is not None else {}
+
+    @staticmethod
+    def _route_after_generation(state: ChatGraphState) -> str:
+        return "finalize" if state.get("response") is not None else "repair"
+
+    async def _repair(self, state: ChatGraphState) -> dict[str, Any]:
+        request = state["request"]
+        selected = state["selected"]
+        repair_prompt = (
+            f"{state['prompt']}\n\n"
+            'REPAIR: Return only a JSON object with exactly one string field named "answer". '
+            "The answer must be one short sentence, no more than 30 words, grounded in the "
+            "evidence above, and use only exact citation markers from the allowed labels. If "
+            "the evidence cannot answer the question, return "
+            '{"answer":"INSUFFICIENT_EVIDENCE"}. '
+            "Do not include reasoning or commentary."
+        )
+        if self._token_count(repair_prompt) > self._prompt_limit + REPAIR_PROMPT_TOKEN_RESERVE:
+            raise ProviderProtocolError("Answer repair prompt exceeds the model context")
+        generation = await self._provider.generate(
+            GenerationInput(
+                prompt=repair_prompt,
+                context_window_tokens=self._config.context_window_tokens,
+                max_output_tokens=min(self._config.max_output_tokens, REPAIR_MAX_OUTPUT_TOKENS),
+                temperature=0,
+                think=False,
+                response_format="json",
             )
-            if self._token_count(repair_prompt) > self._prompt_limit + REPAIR_PROMPT_TOKEN_RESERVE:
-                raise ProviderProtocolError("Answer repair prompt exceeds the model context")
-            generation = await self._provider.generate(
-                GenerationInput(
-                    prompt=repair_prompt,
-                    context_window_tokens=self._config.context_window_tokens,
-                    max_output_tokens=min(self._config.max_output_tokens, REPAIR_MAX_OUTPUT_TOKENS),
-                    temperature=0,
-                    think=False,
-                    response_format="json",
-                )
-            )
-            parsed = self._parse_answer(generation.response, request, selected)
+        )
+        parsed = self._parse_answer(generation.response, request, selected)
         if parsed is None:
             raise ServiceError(
                 422,
                 "INVALID_CITATIONS",
                 "The generated answer did not contain valid source citations.",
             )
+        return {"response": parsed}
 
-        response = parsed
-        return ChatExecutionResult(
-            response=response,
-            evidence_ids=frozenset(evidence_key(item) for item in selected),
-        )
+    @staticmethod
+    def _insufficient_evidence_node(state: ChatGraphState) -> dict[str, Any]:
+        return {"response": BaselineChatExecutor._insufficient_evidence(state["request"]).response}
+
+    @staticmethod
+    def _finalize(state: ChatGraphState) -> dict[str, Any]:
+        response = state.get("response")
+        if response is None:
+            raise RuntimeError("Chat graph reached finalization without a response")
+        selected = state.get("selected", [])
+        return {
+            "result": ChatExecutionResult(
+                response=response,
+                evidence_ids=frozenset(evidence_key(item) for item in selected),
+            )
+        }
 
     def _fit_history(self, request: ChatRequest) -> list[dict[str, str]]:
         history = [{"role": item.role, "content": item.content} for item in request.history]

@@ -24,7 +24,7 @@ llm-backend/
   pyproject.toml, uv.lock, Dockerfile, README.md
 ```
 
-Pipeline functions orchestrate independently testable algorithms, provider adapters, and repositories. Avoid introducing a framework merely to wrap one function call.
+Chat uses LangGraph `StateGraph` to make request stages and the bounded citation-repair branch explicit. Graph nodes still orchestrate independently testable algorithms, provider adapters, and repositories; Ollama access, SQL retrieval, and durable application persistence remain outside the graph framework.
 
 ## Dependencies and inputs
 

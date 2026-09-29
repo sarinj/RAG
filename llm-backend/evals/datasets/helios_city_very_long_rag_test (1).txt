@@ -1,0 +1,2994 @@
+HELIOS CITY DIGITAL OPERATIONS KNOWLEDGE BASE
+
+Document Type: Synthetic RAG Evaluation Corpus
+Version: 3.4
+Last Updated: August 2026
+Classification: Internal Training Material
+Purpose: This document is fictional and designed for retrieval-augmented generation testing.
+
+======================================================================
+1. ORGANIZATION OVERVIEW
+======================================================================
+
+Helios City Authority, usually abbreviated HCA, is the public operations authority responsible for coordinating digital infrastructure, transportation systems, utilities, emergency services, municipal facilities, and selected public-service platforms across the fictional metropolitan region of Helios City.
+
+Helios City has a population of approximately 6.8 million people. The metropolitan region includes the districts of North Harbor, Old Quarter, Greenfield, West Ridge, East Junction, Riverpark, Southgate, University District, and Aeroport Zone.
+
+The Helios City Authority was established in 2011 after several municipal departments were consolidated into a shared administrative organization.
+
+HCA has approximately 14,500 employees. Of these employees, around 2,800 work in technology, data, cybersecurity, telecommunications, or digital operations roles.
+
+HCA operates six major technology platforms:
+1. Helios Transit Platform
+2. Helios Energy Operations Platform
+3. Helios Public Safety Network
+4. Helios Citizen Services Portal
+5. Helios Health Coordination Network
+6. Helios Data Exchange
+
+The authority's central technology division is called Digital Operations and Infrastructure, abbreviated DOI.
+
+As of August 2026, the Chief Digital Operations Officer is Dr. Mira Voss.
+
+The Chief Information Security Officer is Leon Markovic.
+
+The Director of Urban Mobility Systems is Hannah Ito.
+
+The Director of Energy Systems is Rafael Mendes.
+
+The Director of Citizen Platforms is Noor Al-Khatib.
+
+The Director of Data Engineering is Priya Raman.
+
+The authority's main operations center is located in the Civic Core Complex in the Old Quarter.
+
+Helios City uses a hybrid operating model. Critical infrastructure is operated directly by HCA, while some services are delivered by private contractors under service-level agreements.
+
+The authority's strategic plan for 2025-2030 has four primary objectives:
+- improve reliability of essential public services;
+- reduce energy waste across municipal infrastructure;
+- improve digital access for residents;
+- strengthen resilience against cyber and physical disruptions.
+
+The plan does not include a target to privatize the transit system.
+
+======================================================================
+2. DATA CENTERS AND CORE INFRASTRUCTURE
+======================================================================
+
+HCA operates three primary data centers and two disaster-recovery facilities.
+
+The primary data centers are:
+- DC-NORTH in North Harbor;
+- DC-CENTRAL in the Old Quarter;
+- DC-EAST in East Junction.
+
+The disaster-recovery facilities are:
+- DR-WEST in West Ridge;
+- DR-SOUTH in Southgate.
+
+DC-CENTRAL is the oldest facility and was opened in 2014.
+DC-NORTH opened in 2019.
+DC-EAST opened in 2023.
+
+Most new compute workloads are deployed in DC-EAST because it has the highest available power density and the most modern cooling infrastructure.
+
+DC-EAST supports liquid-cooled racks for selected AI and simulation workloads.
+
+The average rack density in DC-EAST is 24 kilowatts, although specialized AI racks may exceed 80 kilowatts.
+
+HCA's internal private cloud uses Kubernetes for container orchestration.
+
+The standard production container runtime is containerd.
+
+PostgreSQL is the default relational database for new internal systems unless a project has a documented reason to use another database.
+
+MongoDB is used for a limited number of document-heavy applications.
+
+Redis is used for caching, rate limiting, ephemeral coordination, and selected stream-processing workloads.
+
+Apache Kafka is the preferred platform for durable event streaming.
+
+Redis Pub/Sub must not be used as the only mechanism for business-critical guaranteed delivery.
+
+HCA maintains a service mesh for selected internal microservices. The service mesh is not mandatory for all applications.
+
+Critical applications must have documented recovery objectives.
+
+For Tier 1 systems, the standard Recovery Time Objective is 30 minutes and the standard Recovery Point Objective is 5 minutes.
+
+For Tier 2 systems, the standard Recovery Time Objective is 4 hours and the standard Recovery Point Objective is 30 minutes.
+
+For Tier 3 systems, the standard Recovery Time Objective is 24 hours and the standard Recovery Point Objective is 12 hours.
+
+Individual systems may have stricter requirements than the defaults.
+
+======================================================================
+3. NETWORK ARCHITECTURE
+======================================================================
+
+The municipal network is divided into several security zones.
+
+The major zones are:
+- Corporate IT
+- Public Services
+- Transit Operations
+- Energy Operations
+- Public Safety
+- Research and Analytics
+- Internet Edge
+
+Traffic between the Energy Operations network and Corporate IT is tightly controlled.
+
+Operational technology systems are not permitted to establish unrestricted outbound internet connections.
+
+Remote access to operational technology networks requires a managed device, multi-factor authentication, and approval through the privileged access system.
+
+HCA uses software-defined networking in its three primary data centers.
+
+Core network links between the main data centers are provisioned at 400 Gbps.
+
+The disaster-recovery facilities are connected by lower-capacity links that are sufficient for backup replication but not for running all production traffic simultaneously.
+
+The citywide municipal fiber network covers approximately 2,100 kilometers.
+
+Some remote sensors use 5G, LoRaWAN, or private microwave links instead of fiber.
+
+LoRaWAN is primarily used for low-bandwidth environmental sensors.
+
+5G is used where higher bandwidth or mobile connectivity is required.
+
+======================================================================
+4. IDENTITY AND ACCESS MANAGEMENT
+======================================================================
+
+All employees receive a Helios Identity account.
+
+Multi-factor authentication is mandatory for all employees.
+
+Privileged users must use phishing-resistant authentication methods.
+
+Hardware security keys are the preferred method for privileged administrators.
+
+Standard employee passwords must be at least 14 characters long.
+
+Privileged accounts must not share passwords with standard user accounts.
+
+Service accounts should use managed identities where supported.
+
+Production access follows the principle of least privilege.
+
+Administrative access to Tier 1 production systems requires approval from both the system owner and an on-duty operations lead.
+
+Emergency access may be granted through the break-glass procedure.
+
+Break-glass access expires after four hours unless it is explicitly renewed.
+
+All break-glass events are reviewed the next business day.
+
+Contractors are given time-limited access based on contract duration and project requirements.
+
+Inactive contractor accounts are automatically disabled after 14 days of inactivity unless an exception is approved.
+
+======================================================================
+5. HELIOS TRANSIT PLATFORM
+======================================================================
+
+The Helios Transit Platform coordinates metro, bus, tram, and municipal ferry operations.
+
+The metro system has 11 lines and 186 stations.
+
+The bus network contains more than 430 routes.
+
+The tram network contains 9 routes.
+
+The municipal ferry system operates 7 passenger routes.
+
+The Transit Platform includes:
+- vehicle location tracking;
+- passenger information displays;
+- fare collection;
+- timetable management;
+- disruption alerts;
+- maintenance planning;
+- driver scheduling;
+- station monitoring.
+
+Vehicle positions are normally updated every 5 seconds for metro and tram vehicles.
+
+Bus positions are normally updated every 10 seconds.
+
+Passenger-facing estimated arrival times are recalculated whenever new position data is received or a service disruption changes the expected route.
+
+The standard target for transit API availability is 99.95% per calendar month.
+
+Public timetable data is published using a GTFS-compatible format.
+
+Real-time disruption data is distributed using a separate event feed.
+
+======================================================================
+6. TRANSIT FARE SYSTEM
+======================================================================
+
+Helios City uses a contactless fare system called HeliosPass.
+
+Passengers may use:
+- a physical HeliosPass card;
+- a mobile HeliosPass wallet;
+- supported contactless bank cards.
+
+The default adult metro fare is 2.80 Helios Credits.
+
+A daily cap of 9.50 Helios Credits applies to adult standard travel within the central fare zone.
+
+A weekly cap of 39.00 Helios Credits applies to the same travel category.
+
+Children under 12 travel free when accompanied by a fare-paying adult.
+
+Students aged 12 through 25 may qualify for a 35% discount after identity verification.
+
+Senior residents aged 67 or older may qualify for free off-peak travel.
+
+Off-peak hours are defined as 09:30 to 16:00 and after 19:00 on weekdays, plus all day on weekends and public holidays.
+
+Fare inspectors may issue a penalty of 75 Helios Credits for travel without a valid fare.
+
+The penalty is reduced to 45 Helios Credits if paid within 10 calendar days.
+
+======================================================================
+7. PROJECT ORBIT
+======================================================================
+
+Project Orbit is the modernization program for the Helios Transit Platform.
+
+The project began in February 2025.
+
+Project Orbit is led by Hannah Ito.
+
+The main goals are:
+- reduce passenger-information latency;
+- unify vehicle telemetry;
+- replace several legacy scheduling systems;
+- improve disruption management;
+- provide a common API for mobile and third-party transit applications.
+
+The legacy disruption system required operators to enter updates independently into three different tools.
+
+Orbit replaces those tools with a single event-driven workflow.
+
+The Orbit event backbone uses Apache Kafka.
+
+Transit events are partitioned primarily by service line and operational region.
+
+The platform retains high-resolution telemetry for 30 days.
+
+Aggregated operational statistics are retained for at least seven years.
+
+The first Orbit production release went live in April 2026 on two tram lines.
+
+A wider rollout to metro operations began in July 2026.
+
+Full transit-wide migration is planned to complete by June 2027.
+
+The target passenger information latency after full deployment is under 3 seconds for most routine updates.
+
+======================================================================
+8. TRANSIT INCIDENT MANAGEMENT
+======================================================================
+
+Transit incidents are categorized as T1, T2, T3, or T4.
+
+T1 is the most severe category.
+
+A T1 incident includes:
+- full closure of a major metro line during peak hours;
+- widespread signaling failure;
+- serious safety event affecting multiple stations;
+- failure of the central transit control center.
+
+A T2 incident includes major service degradation affecting multiple routes.
+
+A T3 incident includes localized delays with meaningful passenger impact.
+
+A T4 incident includes minor operational issues with limited impact.
+
+For T1 incidents, the duty manager must be notified immediately.
+
+The incident commander must be assigned within 5 minutes.
+
+A first public update should be issued within 10 minutes when reliable information is available.
+
+A formal incident review is required within five business days after restoration of normal service.
+
+======================================================================
+9. HELIOS ENERGY OPERATIONS PLATFORM
+======================================================================
+
+The Helios Energy Operations Platform monitors municipal electricity usage, distributed solar assets, district cooling systems, public-building energy consumption, and selected battery-storage facilities.
+
+HCA does not operate the entire regional electricity grid. The regional transmission system is operated by Helios Grid Company, a separate fictional entity.
+
+HCA manages municipal energy assets and coordinates demand-response programs with the regional utility.
+
+Municipal energy consumption averages approximately 1.9 terawatt-hours per year.
+
+Street lighting represents approximately 18% of HCA's electricity consumption.
+
+Municipal buildings represent approximately 41%.
+
+Transit infrastructure represents approximately 27%.
+
+The remaining consumption comes from water systems, public safety facilities, data centers, and other services.
+
+HCA has installed rooftop solar on 312 municipal buildings.
+
+Total installed municipal solar capacity is approximately 184 megawatts.
+
+The authority also operates 260 megawatt-hours of battery storage.
+
+======================================================================
+10. PROJECT SOLARIS
+======================================================================
+
+Project Solaris is HCA's municipal energy optimization program.
+
+The project began in September 2024.
+
+It is led by Rafael Mendes.
+
+Solaris focuses on:
+- forecasting building energy demand;
+- optimizing battery dispatch;
+- reducing peak-demand charges;
+- coordinating flexible loads;
+- detecting abnormal energy consumption.
+
+The program uses weather forecasts, occupancy estimates, electricity prices, and historical consumption data.
+
+The initial pilot covered 40 government buildings.
+
+During the first 12 months, the pilot reduced peak electricity demand by 11% across participating buildings.
+
+Average electricity consumption fell by 6%.
+
+The larger energy savings came from scheduling HVAC equipment more efficiently.
+
+The pilot did not reduce building operating hours.
+
+Solaris expanded to 125 buildings in 2026.
+
+The project target is to reach 300 buildings by the end of 2027.
+
+The optimization engine may delay non-critical loads when electricity prices are high.
+
+Life-safety systems are never intentionally delayed for energy optimization.
+
+======================================================================
+11. DISTRICT COOLING SYSTEM
+======================================================================
+
+Helios City operates four district cooling plants serving public and commercial buildings in dense urban areas.
+
+The plants are named:
+- Harbor Chill
+- Civic Cooling
+- East Thermal
+- Riverpark Energy Center
+
+Civic Cooling is the largest plant.
+
+The district cooling network uses chilled water distributed through underground pipes.
+
+Thermal energy storage tanks allow cooling production to be shifted away from peak electricity hours.
+
+The target chilled-water supply temperature is normally between 5 and 7 degrees Celsius.
+
+A sustained supply temperature above 9 degrees Celsius triggers an operations warning.
+
+Critical hospital cooling loads receive priority during constrained operating conditions.
+
+======================================================================
+12. STREET LIGHTING
+======================================================================
+
+HCA manages approximately 420,000 streetlights.
+
+About 86% of the streetlights use LED fixtures.
+
+The remaining non-LED fixtures are scheduled for replacement by the end of 2028.
+
+Most modern fixtures are connected to the city lighting management network.
+
+Connected fixtures can report:
+- power consumption;
+- lamp failures;
+- controller faults;
+- voltage anomalies;
+- communication status.
+
+Normal overnight lighting levels may be reduced on low-traffic streets between 01:00 and 05:00.
+
+Main roads, pedestrian crossings, emergency access routes, and high-risk areas are excluded from aggressive dimming profiles.
+
+======================================================================
+13. PUBLIC SAFETY NETWORK
+======================================================================
+
+The Helios Public Safety Network supports police, fire, emergency medical services, and emergency coordination agencies.
+
+It includes:
+- emergency dispatch;
+- radio systems;
+- incident mapping;
+- mobile data terminals;
+- emergency alerting;
+- selected video systems;
+- public-warning infrastructure.
+
+The emergency telephone number in Helios City is 112.
+
+The target answer time for 90% of emergency calls is 10 seconds or less.
+
+Emergency calls are prioritized based on incident type and available information.
+
+HCA operates redundant dispatch centers in the Old Quarter and Southgate.
+
+If the primary dispatch center becomes unavailable, essential dispatch functions can be transferred to Southgate.
+
+The failover objective is under 15 minutes.
+
+======================================================================
+14. PUBLIC WARNING SYSTEM
+======================================================================
+
+The public warning system can distribute alerts through:
+- mobile emergency notifications;
+- SMS;
+- city applications;
+- digital signage;
+- radio integration;
+- web publishing.
+
+Emergency mobile alerts are reserved for serious threats where rapid public action may be required.
+
+Examples include:
+- major flooding;
+- large hazardous-material incidents;
+- evacuation orders;
+- severe public-safety threats.
+
+Routine transit delays are not sent as emergency mobile alerts.
+
+Public warnings must be approved by an authorized incident commander or designated emergency communications officer.
+
+======================================================================
+15. CYBERSECURITY OPERATIONS CENTER
+======================================================================
+
+HCA operates a 24-hour Cybersecurity Operations Center, abbreviated SOC.
+
+The SOC monitors:
+- endpoint security events;
+- identity logs;
+- network telemetry;
+- cloud audit logs;
+- security alerts from operational systems;
+- selected third-party threat intelligence.
+
+Security incidents are categorized as S1 through S4.
+
+S1 is the highest severity.
+
+An S1 incident includes a confirmed compromise of a critical public-safety or operational-technology system, widespread ransomware affecting essential services, or unauthorized access with immediate safety implications.
+
+For S1 incidents:
+- the SOC manager must be notified immediately;
+- the CISO must be informed within 15 minutes;
+- an incident commander must be assigned within 10 minutes;
+- containment actions may be taken before full root-cause analysis if delay would significantly increase risk.
+
+S2 incidents include serious compromise with limited scope.
+
+S3 incidents include contained security events with moderate impact.
+
+S4 incidents include low-impact events and policy violations.
+
+======================================================================
+16. VULNERABILITY MANAGEMENT
+======================================================================
+
+Internet-facing critical vulnerabilities must normally be remediated within 7 calendar days.
+
+Critical vulnerabilities on internal Tier 1 systems must normally be remediated within 14 calendar days.
+
+High-severity vulnerabilities on standard systems must normally be remediated within 30 calendar days.
+
+Exceptions require documented risk acceptance and an expiration date.
+
+Emergency patching may bypass the normal change window when active exploitation creates unacceptable risk.
+
+Systems that cannot be patched may require compensating controls such as network isolation, service restriction, or enhanced monitoring.
+
+======================================================================
+17. SOFTWARE DEVELOPMENT STANDARDS
+======================================================================
+
+HCA software teams use Git-based source control.
+
+All production code changes require peer review.
+
+Direct pushes to protected production branches are prohibited.
+
+Automated tests are required for critical business logic.
+
+Secrets must not be stored in source repositories.
+
+CI/CD pipelines must use short-lived credentials where possible.
+
+Production deployments should be reproducible from version-controlled artifacts.
+
+The default backend languages are Java, TypeScript, Go, and Python, depending on project requirements.
+
+No single language is mandatory for all HCA software.
+
+Frontend applications commonly use React or other modern web frameworks.
+
+Production APIs should expose versioned contracts when breaking changes are possible.
+
+======================================================================
+18. API DESIGN GUIDELINES
+======================================================================
+
+Public APIs should use stable identifiers.
+
+APIs should avoid exposing internal database identifiers when those identifiers have no public meaning.
+
+Pagination is required for endpoints that may return large collections.
+
+Cursor-based pagination is preferred for rapidly changing large datasets.
+
+Rate limits should be documented.
+
+Idempotency keys should be supported for payment-like or retry-prone operations where duplicate execution could cause harm.
+
+HTTP 429 is used for rate-limit responses.
+
+HTTP 409 is commonly used for resource-state conflicts.
+
+HTTP 422 may be used for semantically invalid requests when the request syntax itself is valid.
+
+======================================================================
+19. EVENT-DRIVEN ARCHITECTURE
+======================================================================
+
+HCA uses event-driven patterns for several high-volume systems.
+
+For critical workflows, event production should be durable.
+
+The preferred approach for database-backed services is the transactional outbox pattern.
+
+In the transactional outbox pattern:
+1. the business state change and outbox event are written in the same database transaction;
+2. the transaction commits;
+3. a worker or change-data-capture process publishes the event;
+4. downstream consumers process the event;
+5. consumers use idempotency or deduplication where necessary.
+
+Redis notifications may be used as a wake-up optimization.
+
+Redis must not be treated as the sole source of truth for guaranteed event delivery.
+
+Failed messages may be retried with exponential backoff.
+
+Messages that exceed the configured retry policy are moved to a dead-letter queue or dead-letter topic.
+
+======================================================================
+20. CITIZEN SERVICES PORTAL
+======================================================================
+
+The Helios Citizen Services Portal provides online access to more than 120 municipal services.
+
+Common services include:
+- residence certificates;
+- parking permits;
+- property-tax documents;
+- business permits;
+- public-housing applications;
+- waste-service requests;
+- appointment scheduling;
+- complaint submission.
+
+Residents may authenticate using HeliosID.
+
+Some low-risk services can be accessed without signing in.
+
+High-assurance transactions require verified identity.
+
+The portal supports English, Spanish, Arabic, Mandarin, and Helian.
+
+Additional languages are supported for selected high-volume services.
+
+The portal's monthly availability target is 99.9%.
+
+======================================================================
+21. HELIOSID
+======================================================================
+
+HeliosID is the city's digital identity platform.
+
+Residents can create a basic account using an email address or mobile number.
+
+Verified identity status requires stronger evidence.
+
+Accepted verification methods include:
+- in-person verification at a service center;
+- passport-based remote verification;
+- national identity card verification;
+- selected bank-based identity verification.
+
+A verified account is required for certain regulated services.
+
+HeliosID does not store full payment-card numbers.
+
+Authentication events are retained for security and fraud-detection purposes.
+
+Users may review recent login activity from the account security page.
+
+======================================================================
+22. DIGITAL ACCESSIBILITY
+======================================================================
+
+Public digital services must comply with the city's accessibility standard.
+
+The standard is based substantially on WCAG 2.2 AA.
+
+New public-facing services must complete accessibility testing before general release.
+
+Keyboard navigation must be supported.
+
+Critical user journeys must not depend only on color.
+
+Form errors must be programmatically associated with relevant fields.
+
+Video content used for essential public information must include captions.
+
+Exceptions require approval from the Digital Accessibility Office.
+
+======================================================================
+23. PUBLIC RECORDS AND DATA RETENTION
+======================================================================
+
+Different information categories have different retention rules.
+
+Routine web server logs are normally retained for 90 days.
+
+Security logs for Tier 1 systems are normally retained for at least 400 days.
+
+Financial transaction records are retained for at least 7 years.
+
+Procurement records are retained for at least 8 years.
+
+Certain public-safety records may have longer retention periods.
+
+Temporary analytics datasets should have documented expiration dates.
+
+Data must not be retained indefinitely merely because storage is inexpensive.
+
+Legal holds override normal deletion schedules.
+
+======================================================================
+24. PRIVACY PRINCIPLES
+======================================================================
+
+HCA follows data minimization principles.
+
+Applications should collect only information that is reasonably necessary for the service being provided.
+
+Sensitive personal data requires stronger controls.
+
+Access to personal information is logged for high-risk systems.
+
+Production datasets containing personal information should not be copied into development environments unless they are appropriately masked or anonymized.
+
+Analytics teams should prefer aggregated or pseudonymized data where feasible.
+
+Residents may request access to certain personal information held by HCA, subject to applicable law and exemptions.
+
+======================================================================
+25. HELIOS HEALTH COORDINATION NETWORK
+======================================================================
+
+The Helios Health Coordination Network supports coordination among municipal clinics, emergency medical services, public-health teams, and selected hospital partners.
+
+HCA does not own all hospitals in the city.
+
+The network provides:
+- referral routing;
+- emergency capacity reporting;
+- public-health alerts;
+- selected appointment coordination;
+- secure clinical messaging;
+- resource availability dashboards.
+
+Emergency departments update capacity indicators every 5 minutes during normal operation.
+
+During major incidents, update frequency may increase.
+
+The network does not replace each hospital's electronic medical record system.
+
+======================================================================
+26. PROJECT PULSE
+======================================================================
+
+Project Pulse is a health-data interoperability program.
+
+It began in November 2025.
+
+The program is led by Dr. Lena Ortiz.
+
+Pulse aims to improve exchange of:
+- patient referral data;
+- allergy information;
+- medication summaries;
+- discharge notifications;
+- emergency contact information.
+
+The project uses FHIR-compatible APIs for supported integrations.
+
+The first pilot connected three municipal clinics and one partner hospital.
+
+During the pilot, median referral-processing time decreased from 19 hours to 6 hours.
+
+The project does not permit unrestricted bulk access to clinical records.
+
+Access is based on role, care relationship, purpose, and consent requirements.
+
+A second pilot is scheduled to begin in October 2026.
+
+======================================================================
+27. MUNICIPAL CLINIC APPOINTMENTS
+======================================================================
+
+Routine municipal clinic appointments can be booked up to 90 days in advance.
+
+Patients may cancel or reschedule most appointments online.
+
+Appointments cancelled less than 6 hours before the scheduled time are marked as late cancellations.
+
+Repeated late cancellations may trigger reminder or outreach workflows, but they do not automatically result in financial penalties.
+
+Urgent medical needs should not be handled through the standard scheduling queue.
+
+======================================================================
+28. WATER OPERATIONS
+======================================================================
+
+Helios Water Services is a division within HCA responsible for municipal water distribution and wastewater coordination.
+
+The city operates 14 major water-storage reservoirs and 38 pumping stations.
+
+Average daily potable-water demand is approximately 1.1 billion liters.
+
+Water pressure is monitored throughout the distribution network.
+
+A sudden pressure drop combined with unusual flow may indicate a major leak.
+
+Smart meters are installed at approximately 72% of residential properties.
+
+The remaining properties are expected to receive smart meters by 2029.
+
+======================================================================
+29. PROJECT AQUA
+======================================================================
+
+Project Aqua uses analytics to detect water leakage.
+
+The project began in March 2025.
+
+It is led by Samuel Okoro.
+
+Aqua analyzes:
+- flow rates;
+- pressure changes;
+- night-time consumption;
+- acoustic sensor signals;
+- historical pipe failures.
+
+The system produces leak-risk scores for pipe segments.
+
+A high risk score does not automatically trigger excavation.
+
+Field crews first validate suspicious locations using additional inspection methods.
+
+During the first year, Aqua helped identify 48 significant leaks before they caused major surface damage.
+
+The project estimates that early detection saved approximately 2.4 billion liters of water during that period.
+
+======================================================================
+30. WASTE AND RECYCLING SERVICES
+======================================================================
+
+Helios City provides household waste collection, recycling, organics collection, and bulky-item pickup.
+
+General household waste is collected weekly in most districts.
+
+Recycling is collected every two weeks in most residential zones.
+
+Organics collection is weekly where the service is available.
+
+Bulky-item pickup requires an appointment.
+
+Residents may schedule up to four free bulky-item collections per year.
+
+Additional pickups may require a service fee.
+
+Hazardous household waste must be taken to approved collection centers.
+
+Batteries must not be placed in ordinary household waste bins.
+
+======================================================================
+31. SMART WASTE PILOT
+======================================================================
+
+The Smart Waste Pilot uses fill-level sensors in selected public waste containers.
+
+Sensors report estimated fill level every 30 minutes.
+
+The pilot covers 2,400 containers.
+
+Collection routes are adjusted based on expected fill level, traffic conditions, and vehicle availability.
+
+During the six-month trial, average overflow complaints fell by 23%.
+
+Average collection distance fell by 8%.
+
+The pilot did not eliminate scheduled collections entirely.
+
+Certain high-priority locations continue to receive fixed service regardless of sensor readings.
+
+======================================================================
+32. MUNICIPAL PROCUREMENT
+======================================================================
+
+Purchases above 250,000 Helios Credits normally require a competitive tender.
+
+Purchases between 50,000 and 250,000 Helios Credits normally require at least three qualified quotes unless an approved exception applies.
+
+Purchases below 50,000 Helios Credits may use simplified procurement procedures.
+
+Emergency procurement may be used when delay would create unacceptable risk to safety or continuity of essential services.
+
+Emergency procurement must be documented and reviewed after the event.
+
+Conflicts of interest must be disclosed.
+
+Vendors participating in major technology tenders may be required to complete cybersecurity and data-protection assessments.
+
+======================================================================
+33. CONTRACTOR SECURITY
+======================================================================
+
+Contractors with access to HCA systems must sign security and confidentiality agreements.
+
+Contractor access must be limited to the systems required for their work.
+
+Shared contractor accounts are prohibited unless a documented technical exception exists.
+
+Contractor laptops used for privileged access must be managed or meet equivalent security requirements.
+
+Access should be removed promptly when the contract ends.
+
+High-risk vendor access may require session recording.
+
+======================================================================
+34. CHANGE MANAGEMENT
+======================================================================
+
+Production changes are classified as standard, normal, or emergency.
+
+Standard changes are low-risk, repeatable, and pre-approved.
+
+Normal changes require review and scheduling.
+
+Emergency changes may be implemented with expedited approval when delay creates significant operational or security risk.
+
+Emergency changes must still be documented.
+
+A post-implementation review is required for major emergency changes.
+
+The standard high-risk change freeze runs from December 20 through January 3.
+
+Critical security fixes and essential emergency repairs may still be deployed during the freeze.
+
+======================================================================
+35. OBSERVABILITY
+======================================================================
+
+Production systems should expose appropriate metrics, logs, and traces.
+
+Tier 1 services must have:
+- availability monitoring;
+- latency monitoring;
+- error-rate monitoring;
+- dependency monitoring;
+- on-call alerting.
+
+Alerts should be actionable.
+
+Repeated non-actionable alerts should be tuned or removed.
+
+HCA discourages alerting on every individual error when errors do not indicate meaningful service impact.
+
+Service-level indicators should represent user-visible outcomes where possible.
+
+======================================================================
+36. SERVICE LEVEL OBJECTIVES
+======================================================================
+
+Teams are encouraged to define service-level objectives, or SLOs.
+
+An SLO is a target for the reliability of a service over a defined period.
+
+Examples include:
+- successful request rate;
+- latency threshold;
+- job completion rate;
+- data freshness.
+
+Error budgets represent the amount of unreliability allowed while still meeting the SLO.
+
+Teams may slow feature releases when error-budget consumption indicates reliability risk.
+
+An SLO is not the same as a contractual SLA.
+
+SLAs may include contractual consequences.
+
+======================================================================
+37. BACKUP POLICY
+======================================================================
+
+Tier 1 databases must have automated backups.
+
+Backup integrity must be tested regularly.
+
+A backup is not considered reliable merely because the backup job completed successfully.
+
+Restoration tests are required at least quarterly for Tier 1 systems.
+
+Encryption keys required for restoration must also be recoverable.
+
+Backups containing sensitive data must be protected according to the sensitivity of the source system.
+
+Production backups should not be copied to developer laptops.
+
+======================================================================
+38. DISASTER RECOVERY EXERCISES
+======================================================================
+
+HCA conducts disaster-recovery exercises twice per year for major critical services.
+
+Exercises may include:
+- data-center loss;
+- network partition;
+- identity-provider outage;
+- database corruption;
+- ransomware scenario;
+- regional power failure.
+
+At least one annual exercise must involve actual failover of selected production components rather than tabletop discussion only.
+
+Lessons learned are documented and assigned owners.
+
+======================================================================
+39. BUSINESS CONTINUITY
+======================================================================
+
+Each critical department maintains a business-continuity plan.
+
+Plans identify:
+- essential functions;
+- minimum staffing;
+- alternate work locations;
+- critical suppliers;
+- communications procedures;
+- manual fallback processes.
+
+Business continuity is broader than IT disaster recovery.
+
+A service may require both technical recovery and operational workarounds.
+
+======================================================================
+40. AI GOVERNANCE
+======================================================================
+
+HCA permits the use of artificial intelligence when appropriate controls are in place.
+
+AI systems are classified by risk.
+
+High-risk AI systems include applications that materially influence eligibility for public benefits, public-safety actions, enforcement decisions, or access to essential services.
+
+High-risk AI systems require:
+- documented purpose;
+- data-governance review;
+- bias and performance testing;
+- human oversight;
+- auditability;
+- approval before production use.
+
+Low-risk internal productivity tools have lighter requirements.
+
+Generative AI must not be used to automatically make final legal or enforcement decisions without authorized human review.
+
+======================================================================
+41. PROJECT LANTERN
+======================================================================
+
+Project Lantern is HCA's internal generative-AI assistant program.
+
+The project began in January 2026.
+
+It is led by Priya Raman.
+
+Lantern is designed to help employees search internal policies, technical documentation, procurement manuals, and operational procedures.
+
+The system uses retrieval-augmented generation.
+
+The first version uses hybrid retrieval combining dense embeddings and BM25 keyword search.
+
+The retrieval stage initially returns 30 candidate chunks.
+
+A cross-encoder reranker reduces the candidate set to the top 8 chunks.
+
+The final generation model receives those 8 chunks plus the user question.
+
+The system does not automatically treat every retrieved chunk as equally trustworthy.
+
+Metadata includes document owner, publication date, policy status, and security classification.
+
+Draft documents can be excluded from production retrieval for policy questions.
+
+======================================================================
+42. LANTERN CHUNKING STRATEGY
+======================================================================
+
+Lantern uses structure-aware chunking.
+
+Policy documents are primarily split by heading and subsection.
+
+Technical runbooks are split by procedure step groups.
+
+API references are split by endpoint and operation.
+
+The default maximum chunk size is approximately 700 tokens.
+
+The typical overlap is 80 tokens.
+
+Some short sections are merged with neighboring sections when they are closely related.
+
+Tables are converted into structured text representations before indexing.
+
+Chunk identifiers preserve the source document identifier and section path.
+
+======================================================================
+43. LANTERN EVALUATION
+======================================================================
+
+The Lantern team maintains an evaluation set of 1,800 questions.
+
+The evaluation set includes:
+- direct factual questions;
+- paraphrased questions;
+- multi-hop questions;
+- conflicting-document questions;
+- questions with no supported answer;
+- outdated-policy traps.
+
+Evaluation metrics include:
+- retrieval recall at K;
+- mean reciprocal rank;
+- nDCG;
+- answer correctness;
+- citation correctness;
+- unsupported-claim rate.
+
+The team also tracks abstention quality.
+
+A good abstention occurs when the system refuses to invent an answer that is not supported by the retrieved authoritative material.
+
+The target unsupported-claim rate for high-risk policy questions is below 1%.
+
+======================================================================
+44. LANTERN RETRIEVAL BEHAVIOR
+======================================================================
+
+Dense retrieval is especially useful when user wording differs from document wording.
+
+BM25 is useful for exact terms, identifiers, policy codes, unusual names, and specific error messages.
+
+Hybrid retrieval combines both signals.
+
+The current production configuration weights dense retrieval at 0.65 and BM25 at 0.35 before reranking.
+
+These weights are not considered universally optimal.
+
+The team periodically tunes retrieval weights using the evaluation set.
+
+For some exact-code troubleshooting queries, BM25 contributes more useful candidates than dense retrieval.
+
+======================================================================
+45. LANTERN HALLUCINATION POLICY
+======================================================================
+
+Lantern should not invent missing information.
+
+If authoritative sources do not contain enough information, the assistant should say so.
+
+The assistant may explain what information was found and what information is missing.
+
+The assistant should not infer a person's salary from their role.
+
+The assistant should not infer the technology used by a project merely because that technology is common elsewhere in HCA.
+
+The assistant should distinguish between citywide defaults and project-specific facts.
+
+For example, PostgreSQL is the default relational database for new HCA systems, but that does not prove that every named project uses PostgreSQL.
+
+======================================================================
+46. DOCUMENT AUTHORITY RULES
+======================================================================
+
+Not every document has equal authority.
+
+For policy questions, the preferred order is:
+1. current approved policy;
+2. current approved standard;
+3. current operational procedure;
+4. current guidance;
+5. archived material.
+
+Draft documents should not override approved policies.
+
+If two approved sources conflict, the system should surface the conflict rather than silently selecting one unless a precedence rule exists.
+
+A newer document is not automatically more authoritative if it is still a draft.
+
+======================================================================
+47. MODEL HOSTING
+======================================================================
+
+HCA hosts some open-source models internally.
+
+Internal models are served on GPU clusters in DC-EAST.
+
+The inference platform supports batching, KV-cache reuse, and quantized models.
+
+The platform team uses vLLM for several internal model-serving workloads.
+
+Not every AI application uses vLLM.
+
+Some specialized models are served using custom inference services.
+
+GPU scheduling is handled through Kubernetes-based infrastructure.
+
+The largest internal shared inference cluster currently contains 96 GPUs.
+
+A future expansion to 192 GPUs has been approved but is not yet operational.
+
+======================================================================
+48. EMBEDDING PLATFORM
+======================================================================
+
+HCA maintains an internal embedding service.
+
+The service supports multiple embedding models.
+
+The standard English retrieval model currently produces 1,024-dimensional embeddings.
+
+A multilingual model produces 768-dimensional embeddings.
+
+Embeddings are normalized before storage for most semantic-search applications.
+
+Cosine similarity is the default similarity metric for normalized embeddings.
+
+Some experimental systems use dot product.
+
+The embedding platform records model version in vector metadata.
+
+Re-indexing is required when a new embedding model changes vector dimensionality.
+
+======================================================================
+49. VECTOR DATABASES
+======================================================================
+
+HCA uses more than one vector-search technology.
+
+Lantern's production index uses a managed vector-search cluster built on an HNSW-based approximate nearest-neighbor index.
+
+A separate research environment uses PostgreSQL with a vector extension for smaller experiments.
+
+The existence of a standard vector platform does not prohibit teams from using another approved technology when justified.
+
+Vector indexes must store enough metadata to enforce access controls during retrieval.
+
+Post-filtering alone is not acceptable for highly sensitive datasets if unauthorized chunks could already have been retrieved into the application process.
+
+======================================================================
+50. QUERY REWRITING
+======================================================================
+
+Lantern may rewrite user queries before retrieval.
+
+Query rewriting is used to:
+- expand abbreviations;
+- resolve known internal acronyms;
+- add missing domain context;
+- generate alternative retrieval queries.
+
+The original user query is retained.
+
+Rewritten queries must not add unsupported factual assumptions.
+
+For example, a query asking "Who owns Atlas?" should not be rewritten to assume which Atlas project the user means when multiple projects named Atlas exist.
+
+======================================================================
+51. RERANKING
+======================================================================
+
+Lantern uses a cross-encoder reranker after initial retrieval.
+
+The reranker scores the query together with each candidate chunk.
+
+The reranker is slower than embedding similarity but more accurate for many relevance judgments.
+
+Therefore it is applied to a smaller candidate set rather than the entire corpus.
+
+The production system reranks 30 candidates and keeps 8.
+
+Latency budgets may require smaller candidate sets for interactive applications.
+
+======================================================================
+52. PROMPT CONSTRUCTION
+======================================================================
+
+Retrieved chunks are assembled into a context package.
+
+The context package includes:
+- source title;
+- section heading;
+- document status;
+- publication date;
+- chunk text;
+- access classification.
+
+Chunks from higher-authority sources may be ordered before lower-authority sources.
+
+Very similar duplicate chunks may be deduplicated.
+
+The final prompt instructs the model to rely on retrieved evidence and identify uncertainty.
+
+======================================================================
+53. CITATION REQUIREMENTS
+======================================================================
+
+For policy-sensitive answers, Lantern should cite the source document and section.
+
+Citations should support the specific claim they follow.
+
+A citation to an unrelated section is considered a citation error even if the overall document is relevant.
+
+Multi-claim answers may require multiple citations.
+
+If a statement is based on inference rather than explicit text, the answer should make that distinction clear.
+
+======================================================================
+54. SEARCH ANALYTICS
+======================================================================
+
+Lantern records anonymized retrieval analytics.
+
+Metrics include:
+- query count;
+- retrieval latency;
+- reranking latency;
+- no-answer rate;
+- most frequently retrieved sources;
+- user feedback;
+- abandoned searches.
+
+Raw query logs containing potentially sensitive information have restricted access.
+
+Analytics data is retained for 180 days in identifiable form and then aggregated for longer-term trend analysis.
+
+======================================================================
+55. HR LEAVE POLICY
+======================================================================
+
+Full-time HCA employees receive 22 days of annual leave per calendar year.
+
+Employees with at least 7 completed years of service receive 27 days.
+
+Employees with at least 15 completed years of service receive 30 days.
+
+A maximum of 7 unused annual-leave days may be carried into the next calendar year.
+
+Carried-over days must normally be used by April 30.
+
+Unused carry-over beyond that date expires unless an approved exception applies.
+
+Parental leave is governed by a separate policy.
+
+Medical leave is not deducted from annual leave when supported by required documentation.
+
+======================================================================
+56. REMOTE WORK POLICY
+======================================================================
+
+Eligible office-based employees may work remotely up to three days per week with manager approval.
+
+Some roles are designated on-site due to operational requirements.
+
+Employees working remotely must remain reachable during agreed working hours.
+
+HCA may require in-person attendance for training, incident response, planning sessions, or operational needs.
+
+Employees working permanently outside the metropolitan region require additional HR and tax review.
+
+Remote work is not an entitlement for every position.
+
+======================================================================
+57. TRAVEL EXPENSE POLICY
+======================================================================
+
+Employees traveling for approved work may claim reasonable transportation, lodging, and meal expenses.
+
+Air travel under six hours should normally be booked in economy class.
+
+Premium economy may be approved for flights longer than six hours.
+
+Business class requires executive approval except where required by medical accommodation or exceptional circumstances.
+
+Hotel expenses should remain within published city limits unless no compliant accommodation is available.
+
+Receipts are required for individual expenses above 25 Helios Credits.
+
+======================================================================
+58. INFORMATION CLASSIFICATION
+======================================================================
+
+HCA uses four information classifications:
+- Public
+- Internal
+- Confidential
+- Restricted
+
+Public information may be disclosed openly.
+
+Internal information is intended for HCA staff and authorized partners.
+
+Confidential information could cause material harm if disclosed improperly.
+
+Restricted information requires the strongest controls and includes selected security credentials, highly sensitive personal information, and certain public-safety operational data.
+
+Classification labels should follow the data through approved systems.
+
+======================================================================
+59. EMAIL AND MESSAGING
+======================================================================
+
+Employees should not send Restricted information through ordinary unencrypted email.
+
+Confidential information may be sent using approved secure messaging mechanisms.
+
+Automatic forwarding of HCA email to personal accounts is prohibited.
+
+Business records created in messaging platforms may still be subject to retention and records-management requirements.
+
+Sensitive discussions should use approved systems.
+
+======================================================================
+60. DEVICE MANAGEMENT
+======================================================================
+
+HCA-issued laptops are centrally managed.
+
+Full-disk encryption is mandatory.
+
+Endpoint protection must remain enabled.
+
+Users must not disable security software without authorization.
+
+Lost or stolen devices must be reported immediately.
+
+Mobile devices used for HCA email must meet minimum security requirements.
+
+Rooted or jailbroken devices are not permitted to access managed HCA mobile services.
+
+======================================================================
+61. PHYSICAL ACCESS
+======================================================================
+
+Access badges are required in controlled HCA facilities.
+
+Employees must not lend badges to other people.
+
+Visitors must be escorted in restricted areas unless specifically authorized.
+
+Data-center access requires separate authorization.
+
+DC-EAST requires two-factor physical access for high-security zones using a badge plus biometric verification.
+
+Tailgating through secure doors is prohibited.
+
+======================================================================
+62. FACILITY INCIDENTS
+======================================================================
+
+A facility incident may involve:
+- fire;
+- flooding;
+- power loss;
+- HVAC failure;
+- physical security breach;
+- structural damage.
+
+Life safety takes priority over equipment protection.
+
+Employees must follow evacuation instructions.
+
+Staff must not re-enter an evacuated facility until authorized.
+
+Critical systems may be failed over remotely when safe to do so.
+
+======================================================================
+63. GENERATOR AND UPS SYSTEMS
+======================================================================
+
+Primary data centers use UPS systems to bridge short power interruptions.
+
+Backup generators provide longer-duration support.
+
+DC-EAST maintains fuel reserves intended to support at least 48 hours of generator operation at planned emergency load.
+
+Fuel contracts provide priority resupply during regional emergencies, but delivery time is not guaranteed.
+
+Quarterly generator tests are performed under load.
+
+======================================================================
+64. COOLING AT DC-EAST
+======================================================================
+
+DC-EAST uses a combination of air cooling and liquid cooling.
+
+General-purpose racks primarily use air cooling.
+
+High-density AI racks may use direct-to-chip liquid cooling.
+
+The facility is designed with redundant cooling loops.
+
+Cooling alarms are integrated into the operations monitoring platform.
+
+A high coolant temperature alarm does not automatically shut down all servers.
+
+Operators evaluate severity and may migrate workloads before initiating shutdown procedures.
+
+======================================================================
+65. CAPACITY MANAGEMENT
+======================================================================
+
+Infrastructure teams review compute, storage, network, and power capacity monthly.
+
+Capacity forecasts cover at least 18 months for critical shared platforms.
+
+Projects expected to require more than 500 kilowatts of new data-center power must be reviewed by the Capacity Council.
+
+The 2026 AI expansion is the main driver of new DC-EAST power demand.
+
+No plan has been approved to build a fourth primary data center before 2028.
+
+======================================================================
+66. FINANCIAL SYSTEMS
+======================================================================
+
+HCA's core finance platform handles budgeting, procurement, accounts payable, payroll integration, and financial reporting.
+
+Financial posting periods are closed monthly.
+
+Certain corrections require approval from both finance and the originating department.
+
+Financial transaction records are retained for at least seven years.
+
+Production financial data is classified as Confidential unless a more restrictive classification applies.
+
+======================================================================
+67. PAYMENT PROCESSING
+======================================================================
+
+The Citizen Services Portal supports online payments for selected services.
+
+Payment-card processing is outsourced to approved payment providers.
+
+HCA systems use tokens rather than storing full payment-card numbers.
+
+Refunds generally return to the original payment method.
+
+Refund timing depends on the payment provider and financial institution.
+
+Duplicate payment prevention uses idempotency keys for supported transaction flows.
+
+======================================================================
+68. PARKING SERVICES
+======================================================================
+
+HCA manages municipal parking permits and selected on-street parking systems.
+
+Residents may apply for residential parking permits online.
+
+A standard residential parking permit is valid for one year.
+
+Digital permits are associated with vehicle license plates.
+
+Temporary visitor permits may be issued for shorter durations.
+
+Parking enforcement officers verify permit status using mobile devices.
+
+======================================================================
+69. PROJECT VECTOR
+======================================================================
+
+Project Vector is a parking-analytics initiative.
+
+It began in June 2026.
+
+The project is led by Noor Al-Khatib.
+
+Vector analyzes anonymized parking occupancy data to improve parking policy and enforcement planning.
+
+The first pilot includes 12,000 parking spaces.
+
+The project explicitly excludes facial recognition.
+
+License-plate data used for enforcement is governed separately from anonymized occupancy analytics.
+
+======================================================================
+70. BUILDING MANAGEMENT SYSTEMS
+======================================================================
+
+HCA operates building-management systems across major municipal facilities.
+
+These systems monitor HVAC, lighting, access systems, elevators, and selected environmental conditions.
+
+Building-management networks are segmented from normal office networks.
+
+Remote vendor access is permitted only through approved gateways.
+
+Default vendor passwords must be changed before production deployment.
+
+Critical configuration backups are stored securely.
+
+======================================================================
+71. FIRE SAFETY SYSTEMS
+======================================================================
+
+Fire alarm systems are treated as life-safety systems.
+
+They must not be disabled for routine energy optimization.
+
+Maintenance that requires temporary impairment must follow approved fire-watch procedures.
+
+Fire alarm events have higher operational priority than comfort-related building alarms.
+
+======================================================================
+72. ENVIRONMENTAL SENSORS
+======================================================================
+
+HCA operates environmental sensors for air quality, noise, temperature, rainfall, river levels, and selected pollutants.
+
+Low-bandwidth sensors often use LoRaWAN.
+
+Air-quality stations report particulate matter including PM2.5 and PM10.
+
+Rainfall data is used by flood-response models.
+
+Sensors may be temporarily marked unreliable if calibration checks fail.
+
+Unreliable data should not be silently treated as accurate.
+
+======================================================================
+73. FLOOD MONITORING
+======================================================================
+
+Helios City has 126 automated flood-monitoring stations.
+
+River-level sensors update every 2 minutes during normal conditions.
+
+During severe weather, selected stations update every 30 seconds.
+
+Flood warning thresholds vary by location.
+
+A high sensor reading does not automatically mean evacuation is required.
+
+Emergency managers consider rainfall forecasts, upstream conditions, tide levels, and infrastructure status.
+
+======================================================================
+74. PROJECT RIVERGUARD
+======================================================================
+
+Project RiverGuard improves flood prediction.
+
+It began in 2024 and is led by Mei Tan.
+
+The model combines:
+- rainfall radar;
+- river gauges;
+- tide forecasts;
+- soil saturation;
+- drainage capacity.
+
+The project produces forecasts up to six hours ahead.
+
+In 2025 testing, RiverGuard improved warning lead time by an average of 22 minutes compared with the previous rules-based method.
+
+RiverGuard recommendations are advisory.
+
+Emergency officials remain responsible for issuing evacuation orders.
+
+======================================================================
+75. AIR QUALITY PROGRAM
+======================================================================
+
+The city publishes an hourly air-quality index.
+
+The index is derived from multiple pollutants.
+
+PM2.5 is often the dominant pollutant during dry-season haze events.
+
+When air quality reaches the severe category, HCA may recommend reducing strenuous outdoor activity.
+
+School closures are decided by the Education Department, not automatically by the air-quality system.
+
+======================================================================
+76. LIBRARY SYSTEM
+======================================================================
+
+The municipal library network contains 64 branches.
+
+Residents may borrow physical books for 21 days.
+
+Most books can be renewed twice if no other user has placed a hold.
+
+E-books have separate lending rules determined by licensing agreements.
+
+Lost physical items may incur replacement charges.
+
+Children under 16 may obtain library cards with guardian approval.
+
+======================================================================
+77. DIGITAL ARCHIVES
+======================================================================
+
+HCA maintains a digital archive for historical municipal records.
+
+Archived records may include photographs, maps, council documents, planning records, and selected audiovisual material.
+
+Not all archived material is publicly accessible.
+
+Privacy, copyright, security, and preservation restrictions may apply.
+
+Digitized items preserve metadata describing provenance and rights status.
+
+======================================================================
+78. OPEN DATA PORTAL
+======================================================================
+
+The Helios Open Data Portal publishes more than 600 datasets.
+
+Common topics include:
+- transit;
+- environment;
+- budgets;
+- public facilities;
+- street maintenance;
+- planning;
+- demographics.
+
+Datasets are assigned owners and update frequencies.
+
+Some datasets update in near real time.
+
+Others update monthly, quarterly, or annually.
+
+The portal does not publish data that would create unacceptable privacy or security risk.
+
+======================================================================
+79. DATA QUALITY
+======================================================================
+
+Dataset owners are responsible for data quality.
+
+Common dimensions include:
+- completeness;
+- accuracy;
+- timeliness;
+- consistency;
+- uniqueness.
+
+A dataset may be complete but inaccurate.
+
+A dataset may be accurate but stale.
+
+Critical analytical datasets should document quality checks.
+
+Known limitations should be published when they materially affect interpretation.
+
+======================================================================
+80. DATA CATALOG
+======================================================================
+
+The internal data catalog records:
+- dataset name;
+- owner;
+- description;
+- classification;
+- source system;
+- refresh schedule;
+- retention policy;
+- access procedure.
+
+Catalog registration is mandatory for new enterprise datasets classified Confidential or Restricted.
+
+The catalog does not store every dataset's full contents.
+
+======================================================================
+81. DATA SHARING
+======================================================================
+
+Internal data sharing should follow least-privilege principles.
+
+Cross-department access may require approval from the dataset owner.
+
+Restricted datasets may require privacy, legal, or security review.
+
+Bulk exports of sensitive data should be minimized.
+
+Where practical, teams should provide filtered APIs or governed analytical views instead of unrestricted raw copies.
+
+======================================================================
+82. ANALYTICS PLATFORM
+======================================================================
+
+HCA operates a central analytics platform.
+
+It supports SQL analytics, notebooks, dashboards, and scheduled data pipelines.
+
+Production analytical jobs should use managed service identities.
+
+Shared credentials are discouraged.
+
+Heavy queries should be optimized to avoid unnecessary resource consumption.
+
+Long-running exploratory workloads may be moved to dedicated compute pools.
+
+======================================================================
+83. MACHINE LEARNING OPERATIONS
+======================================================================
+
+Machine-learning models deployed in production must have documented owners.
+
+High-impact models require documented evaluation datasets and monitoring.
+
+Model performance can degrade when real-world data changes.
+
+Teams should monitor drift where relevant.
+
+Retraining schedules should be based on model needs rather than arbitrary fixed intervals.
+
+Model version and training-data lineage should be recorded.
+
+======================================================================
+84. BIAS AND FAIRNESS REVIEW
+======================================================================
+
+High-risk AI applications require fairness review.
+
+Fairness review considers whether performance differs materially across relevant groups.
+
+A fairness metric must be chosen based on context.
+
+There is no single fairness metric that is correct for every application.
+
+Observed differences require investigation, not automatic assumptions about cause.
+
+Decisions to deploy high-risk AI must include human accountability.
+
+======================================================================
+85. HUMAN OVERSIGHT
+======================================================================
+
+Human oversight must be meaningful.
+
+A human reviewer should have enough information and authority to challenge or override an automated recommendation.
+
+Merely placing a person in the workflow does not automatically create effective oversight.
+
+High-risk systems should provide reason codes or supporting evidence when feasible.
+
+======================================================================
+86. MODEL MONITORING
+======================================================================
+
+Production model monitoring may include:
+- input drift;
+- output distribution changes;
+- prediction confidence;
+- error rates;
+- latency;
+- resource consumption;
+- fairness indicators.
+
+Not every metric is relevant for every model.
+
+Alerts should focus on changes that may indicate meaningful degradation.
+
+======================================================================
+87. PUBLIC AI DISCLOSURE
+======================================================================
+
+When residents interact directly with a generative AI assistant on an HCA public service, the interface should disclose that the user is interacting with an AI system.
+
+The disclosure should not imply that the AI has authority it does not have.
+
+For regulated decisions, final authority remains with designated human officials unless law and policy explicitly provide otherwise.
+
+======================================================================
+88. SECURITY AWARENESS TRAINING
+======================================================================
+
+All employees must complete annual security awareness training.
+
+New employees must complete baseline training within 30 days of starting work.
+
+Phishing simulations are conducted periodically.
+
+Employees are encouraged to report suspicious messages.
+
+Repeated failure to complete mandatory training may result in account restrictions.
+
+======================================================================
+89. PHISHING RESPONSE
+======================================================================
+
+Employees who suspect they clicked a phishing link should report it immediately.
+
+They should not wait to see whether unusual activity occurs.
+
+If credentials were entered, the user should change the password and notify the security team.
+
+Security staff may invalidate active sessions and tokens.
+
+Rapid reporting can reduce the impact of credential theft.
+
+======================================================================
+90. INCIDENT COMMUNICATION
+======================================================================
+
+Major incidents require coordinated internal and external communication.
+
+Technical teams should avoid publishing unverified root-cause claims during an active incident.
+
+Initial updates should focus on known impact, affected services, user actions, and investigation status.
+
+Root cause may be published after sufficient evidence is available.
+
+======================================================================
+91. POSTMORTEMS
+======================================================================
+
+HCA uses blameless postmortems for major operational incidents.
+
+A blameless postmortem focuses on system conditions, contributing factors, decisions, and improvements rather than personal blame.
+
+Postmortems should include:
+- timeline;
+- impact;
+- detection;
+- response;
+- contributing factors;
+- corrective actions.
+
+Corrective actions should have owners and target dates.
+
+======================================================================
+92. ON-CALL PRACTICES
+======================================================================
+
+Tier 1 services require 24-hour on-call coverage.
+
+On-call rotations should be large enough to avoid chronic overload.
+
+Escalation paths must be documented.
+
+Pages should be reserved for issues requiring timely human action.
+
+Non-urgent notifications should use lower-priority channels.
+
+======================================================================
+93. MAINTENANCE WINDOWS
+======================================================================
+
+Standard maintenance windows vary by service.
+
+Citizen-facing systems generally schedule planned maintenance between 01:00 and 05:00 local time when possible.
+
+Transit operations systems may use different windows because transport runs during late-night hours.
+
+Emergency services must maintain continuity even during maintenance.
+
+Planned downtime should be communicated in advance when users are affected.
+
+======================================================================
+94. RELEASE MANAGEMENT
+======================================================================
+
+High-risk releases may use canary deployment.
+
+Canary deployment sends a small percentage of production traffic to the new version before wider rollout.
+
+Rollback criteria should be defined in advance.
+
+A canary that shows increased error rates or unacceptable latency should not automatically continue rollout.
+
+Feature flags may be used to separate code deployment from feature activation.
+
+======================================================================
+95. DATABASE MIGRATIONS
+======================================================================
+
+Database migrations should be designed to minimize downtime.
+
+Large schema changes should avoid long-running locks.
+
+Backward-compatible migrations are preferred.
+
+Applications may use expand-and-contract techniques for complex changes.
+
+Destructive migration steps should be delayed until old application versions are no longer active.
+
+======================================================================
+96. CACHE USAGE
+======================================================================
+
+Caches may reduce latency and backend load.
+
+Cached data must have appropriate expiration or invalidation behavior.
+
+Critical authorization decisions should not rely on indefinitely stale cache entries.
+
+Cache failures should not corrupt source-of-truth data.
+
+Some applications may operate with degraded performance when Redis is unavailable.
+
+Others may temporarily disable features that depend heavily on cache state.
+
+======================================================================
+97. RATE LIMITING
+======================================================================
+
+Public APIs use rate limiting to protect service reliability.
+
+Rate limits may vary by API and client class.
+
+Authenticated partners may receive higher limits than anonymous users.
+
+Rate-limit responses should include clear retry guidance where possible.
+
+Clients should use exponential backoff rather than aggressive immediate retry loops.
+
+======================================================================
+98. MESSAGE RETRIES
+======================================================================
+
+Distributed systems should assume that message delivery may be duplicated.
+
+Consumers should be idempotent where duplicate processing could cause harm.
+
+Retries should use backoff.
+
+Infinite immediate retries are prohibited.
+
+Poison messages should eventually move to dead-letter handling.
+
+Operators should have tools to inspect and replay dead-lettered messages safely.
+
+======================================================================
+99. PROJECT ATLAS
+======================================================================
+
+HCA has a project named Atlas in the infrastructure division.
+
+Infrastructure Atlas began in May 2026.
+
+It is led by Jordan Wei.
+
+Its purpose is to map dependencies among critical municipal systems.
+
+Atlas builds a dependency graph linking applications, databases, networks, identity systems, and external vendors.
+
+The first phase covers Tier 1 services.
+
+The project target is to map at least 95% of Tier 1 production dependencies by March 2027.
+
+This Atlas project is unrelated to any similarly named external or departmental projects.
+
+======================================================================
+100. PROJECT NOVA
+======================================================================
+
+Project Nova is an employee-device modernization initiative.
+
+It began in July 2025.
+
+Nova is led by Elena Petrov.
+
+The project replaces aging laptops, standardizes endpoint management, and improves remote-support capabilities.
+
+The standard laptop replacement cycle is moving from five years to four years for most knowledge-worker devices.
+
+Field devices may use different replacement schedules.
+
+Nova does not cover data-center servers.
+
+======================================================================
+101. PROJECT AEGIS
+======================================================================
+
+Project Aegis strengthens privileged access management.
+
+It began in October 2025.
+
+Aegis is led by Leon Markovic.
+
+The project introduces:
+- just-in-time privileged access;
+- session recording;
+- stronger approval workflows;
+- reduced standing administrator privileges.
+
+The first rollout covered database administrators.
+
+The next rollout covers network administrators.
+
+The long-term goal is to eliminate most permanent privileged access for human users.
+
+======================================================================
+102. TRAINING AND CERTIFICATION
+======================================================================
+
+Employees in specialized operational roles may require recurring certification.
+
+Examples include:
+- electrical safety;
+- confined-space work;
+- emergency communications;
+- data-center operations;
+- security administration.
+
+Training requirements depend on role.
+
+Managers are responsible for ensuring required certifications remain current.
+
+Expired mandatory certification may result in temporary removal from certain duties.
+
+======================================================================
+103. SUPPORT DESK
+======================================================================
+
+The HCA support desk operates 24 hours for critical incident reporting.
+
+General employee support is staffed from 06:00 to 22:00 on weekdays and 08:00 to 18:00 on weekends.
+
+Priority 1 tickets receive immediate triage.
+
+Priority 4 tickets may be handled during normal support hours.
+
+Password reset requests may be completed through self-service when identity checks succeed.
+
+======================================================================
+104. TICKET PRIORITIES
+======================================================================
+
+Priority 1 indicates a critical outage or severe operational impact.
+
+Priority 2 indicates major degradation with no easy workaround.
+
+Priority 3 indicates limited impact or a workable alternative.
+
+Priority 4 indicates low urgency, routine requests, or minor inconvenience.
+
+Ticket priority is based on impact and urgency rather than the seniority of the requester.
+
+======================================================================
+105. ASSET MANAGEMENT
+======================================================================
+
+Technology assets are recorded in the configuration and asset-management system.
+
+Managed assets include:
+- laptops;
+- servers;
+- network equipment;
+- mobile devices;
+- specialized operational devices;
+- licensed software.
+
+Asset records should include owner, location, lifecycle state, and support status where relevant.
+
+Retired storage devices must be sanitized according to security standards.
+
+======================================================================
+106. SOFTWARE LICENSING
+======================================================================
+
+Teams must use properly licensed software.
+
+Open-source software is permitted subject to license and security review appropriate to the use case.
+
+Software with restrictive licensing terms may require legal review.
+
+Developers should not assume that publicly available source code is automatically free of licensing obligations.
+
+======================================================================
+107. OPEN-SOURCE CONTRIBUTIONS
+======================================================================
+
+Employees may contribute to open-source projects when contributions comply with HCA policy.
+
+Contributions involving HCA-developed code require approval.
+
+Sensitive internal information must not be disclosed.
+
+Security vulnerabilities should follow coordinated disclosure practices rather than public discussion before remediation.
+
+======================================================================
+108. THIRD-PARTY RISK
+======================================================================
+
+Critical vendors are assessed for security, resilience, and data-protection risk.
+
+Assessment depth depends on the service.
+
+A vendor hosting Restricted information receives more scrutiny than a vendor providing non-sensitive office supplies.
+
+Critical SaaS vendors may be required to provide incident-notification commitments.
+
+Vendor risk is reviewed periodically.
+
+======================================================================
+109. CLOUD USAGE
+======================================================================
+
+HCA uses both private infrastructure and approved public cloud services.
+
+Cloud use depends on workload sensitivity, resilience needs, cost, and technical requirements.
+
+Restricted workloads may require additional approval.
+
+Teams must not create unmanaged cloud accounts for production systems.
+
+Cloud resources should use centralized identity and logging.
+
+======================================================================
+110. COST MANAGEMENT
+======================================================================
+
+Cloud and infrastructure teams use chargeback or showback reports.
+
+Large unexpected cost increases are investigated.
+
+Idle resources should be removed when practical.
+
+Cost optimization must not weaken required resilience or security.
+
+Reserved capacity may be used for stable workloads.
+
+Burst workloads may use on-demand capacity.
+
+======================================================================
+111. GREEN IT
+======================================================================
+
+HCA tracks energy efficiency for major computing facilities.
+
+DC-EAST has a target annualized PUE below 1.30.
+
+Workload scheduling may consider energy availability and carbon intensity when operationally feasible.
+
+Critical workloads are not delayed solely to reduce carbon emissions if doing so would violate service requirements.
+
+Equipment lifecycle decisions consider energy efficiency and embodied cost.
+
+======================================================================
+112. ELECTRONIC WASTE
+======================================================================
+
+Retired electronic equipment is processed through approved recyclers.
+
+Storage media must be securely erased or physically destroyed when required.
+
+Usable equipment may be redeployed after sanitization.
+
+HCA aims to reuse devices internally before disposal when security and support requirements allow.
+
+======================================================================
+113. PROJECT ECHO
+======================================================================
+
+Project Echo is the city's internal knowledge-preservation initiative.
+
+It began in February 2026.
+
+Echo is led by Sofia Marin.
+
+The project captures critical operational knowledge from retiring staff and long-serving specialists.
+
+Knowledge is stored as reviewed procedures, interviews, diagrams, and troubleshooting guides.
+
+Draft interview transcripts are not automatically treated as authoritative procedures.
+
+Reviewed operating procedures have higher authority.
+
+======================================================================
+114. KNOWLEDGE ARTICLE LIFECYCLE
+======================================================================
+
+Knowledge articles have owners.
+
+Articles should include a review date.
+
+Critical procedures are reviewed at least annually.
+
+Outdated articles may be marked archived.
+
+Archived articles remain searchable in some research contexts but should not be used as the primary source for current operational instructions.
+
+======================================================================
+115. DOCUMENT VERSIONING
+======================================================================
+
+Approved policies have explicit version numbers and effective dates.
+
+A superseded policy remains available for audit history but is marked inactive.
+
+Systems answering current-policy questions should prefer the active version.
+
+Historical questions may require older versions.
+
+A user's question about what was allowed in 2023 should not automatically use a 2026 policy.
+
+======================================================================
+116. TIME-SENSITIVE RETRIEVAL
+======================================================================
+
+RAG systems must consider time.
+
+A newer policy may supersede an older policy.
+
+A future-dated policy may be approved but not yet effective.
+
+Retrieval metadata includes effective date and expiry date where available.
+
+Answer generation should distinguish current, historical, and future rules.
+
+======================================================================
+117. CONFLICTING DOCUMENT EXAMPLE
+======================================================================
+
+An archived 2024 remote-work guide allowed employees to work remotely up to two days per week.
+
+The current 2026 approved remote-work policy allows eligible office-based employees to work remotely up to three days per week with manager approval.
+
+The 2024 guide remains searchable for historical reference.
+
+For a question asking about the current rule in 2026, the approved 2026 policy should be preferred.
+
+For a question asking what the rule was in 2024, the archived guide may be relevant.
+
+======================================================================
+118. TEMPORARY POLICY EXCEPTIONS
+======================================================================
+
+During declared emergencies, temporary policy exceptions may be issued.
+
+Exceptions must specify:
+- scope;
+- start date;
+- end date;
+- approving authority.
+
+An exception does not permanently modify the underlying policy.
+
+When the exception expires, the normal policy applies again unless a new exception is issued.
+
+======================================================================
+119. DATA BREACH RESPONSE
+======================================================================
+
+Suspected personal-data breaches must be reported to the privacy and security teams promptly.
+
+Investigators assess:
+- data types;
+- number of affected people;
+- likelihood of misuse;
+- whether data was encrypted;
+- exposure duration.
+
+Notification requirements depend on law, severity, and circumstances.
+
+Employees should not contact affected residents directly unless directed by the incident team.
+
+======================================================================
+120. FRAUD DETECTION
+======================================================================
+
+Some citizen-service transactions use fraud-risk scoring.
+
+Risk scores may trigger additional verification.
+
+A high risk score does not automatically mean fraud occurred.
+
+Human review is required for adverse actions in high-impact cases.
+
+Fraud models are monitored for false positives.
+
+======================================================================
+121. CALL CENTER OPERATIONS
+======================================================================
+
+The municipal call center handles non-emergency service requests.
+
+The main number is 311.
+
+The call center operates 24 hours.
+
+Calls related to emergencies are transferred to 112.
+
+The target average speed to answer for 311 calls is under 60 seconds during normal demand.
+
+Major incidents may increase wait times.
+
+======================================================================
+122. LANGUAGE SERVICES
+======================================================================
+
+The call center supports real-time interpretation.
+
+The most frequently requested languages besides English are Spanish, Mandarin, Arabic, and Vietnamese.
+
+Interpretation is available for additional languages through a contracted service.
+
+Automated translation may assist agents but should not replace qualified interpretation in high-risk legal or medical contexts.
+
+======================================================================
+123. PUBLIC MEETINGS
+======================================================================
+
+Major city projects may require public consultation.
+
+Meeting notices are published in advance.
+
+Some meetings are streamed online.
+
+Written comments may be submitted during designated consultation periods.
+
+Public comments are part of the project record where applicable.
+
+======================================================================
+124. CONSTRUCTION PROJECT DATA
+======================================================================
+
+Infrastructure projects maintain schedules, budgets, risk logs, and contractor records.
+
+Schedule baselines are revised only through approved change control.
+
+A missed internal milestone does not automatically mean the final completion date will be missed.
+
+Risk registers include probability, impact, mitigation, and owner.
+
+======================================================================
+125. PROJECT BRIDGEPOINT
+======================================================================
+
+Bridgepoint is the modernization project for the North Harbor Bridge control systems.
+
+The project began in August 2025.
+
+It is led by Omar Reyes.
+
+The project replaces traffic-control electronics, structural sensors, and operator workstations.
+
+Construction is staged to avoid full bridge closure.
+
+The target completion date is February 2027.
+
+The project budget is 86 million Helios Credits.
+
+As of July 2026, the project had spent 49 million Helios Credits.
+
+======================================================================
+126. TRAFFIC MANAGEMENT
+======================================================================
+
+HCA operates adaptive traffic signals at approximately 1,700 intersections.
+
+Signal timing uses traffic volumes, pedestrian demand, transit priority, and incident conditions.
+
+Emergency vehicles may receive signal priority.
+
+Transit signal priority does not guarantee a green light in every situation.
+
+Pedestrian minimum crossing times must still be respected.
+
+======================================================================
+127. PROJECT FLOW
+======================================================================
+
+Project Flow improves adaptive traffic signal coordination.
+
+It began in 2025.
+
+Flow is led by Hannah Ito's mobility division but day-to-day project management is handled by Victor Huang.
+
+The pilot covers 220 intersections.
+
+During weekday peak periods, average corridor travel time fell by 7%.
+
+Bus travel-time variability fell by 12%.
+
+The pilot did not show a meaningful reduction in total citywide traffic volume.
+
+======================================================================
+128. MICROMOBILITY
+======================================================================
+
+Shared bicycles and scooters operate under city permits.
+
+Operators must provide anonymized trip data.
+
+Scooters have a maximum permitted speed of 20 km/h in normal zones.
+
+Some pedestrian-heavy zones have lower geofenced speed limits.
+
+Parking rules vary by district.
+
+Improperly parked devices may be removed by operators or the city.
+
+======================================================================
+129. EV CHARGING
+======================================================================
+
+HCA manages 1,850 public EV charging ports.
+
+Most are Level 2 chargers.
+
+A smaller number are high-power DC fast chargers.
+
+Pricing may vary by location and time.
+
+Idle fees may apply when vehicles remain connected after charging is complete.
+
+Municipal fleet charging is managed separately from public charging.
+
+======================================================================
+130. MUNICIPAL FLEET
+======================================================================
+
+HCA operates approximately 9,400 vehicles.
+
+The fleet includes buses, service vans, police vehicles, fire apparatus, maintenance trucks, and administrative cars.
+
+The city target is for 70% of light-duty municipal vehicles to be zero-emission by the end of 2030.
+
+Heavy-duty emergency vehicles follow separate transition plans.
+
+======================================================================
+131. PROJECT CHARGE
+======================================================================
+
+Project Charge expands depot charging for municipal electric fleets.
+
+It began in March 2026.
+
+The project is led by Rafael Mendes.
+
+The first phase focuses on bus depots.
+
+The program includes managed charging to avoid excessive peak demand.
+
+Charging may be staggered based on vehicle departure schedules and battery state.
+
+Emergency-response readiness takes priority over electricity-price optimization.
+
+======================================================================
+132. SCHOOL TRANSPORT DATA
+======================================================================
+
+School bus operations are managed by the Education Department in partnership with HCA transport systems.
+
+HCA provides vehicle-tracking infrastructure.
+
+Student eligibility rules are controlled by the Education Department.
+
+Transit fare rules for public buses are separate from school-bus eligibility rules.
+
+======================================================================
+133. WEATHER OPERATIONS
+======================================================================
+
+The city operations center monitors severe weather.
+
+Weather risks include:
+- intense rainfall;
+- heat waves;
+- strong winds;
+- lightning;
+- river flooding.
+
+Departments may increase staffing before forecast major events.
+
+Weather alerts from external meteorological agencies are integrated into the operations dashboard.
+
+======================================================================
+134. HEAT RESPONSE
+======================================================================
+
+During extreme heat, HCA may open cooling centers.
+
+Cooling centers prioritize neighborhoods with vulnerable populations and limited access to air conditioning.
+
+Public libraries and community centers may serve as cooling locations.
+
+Operating hours may be extended during severe events.
+
+======================================================================
+135. URBAN TREE PROGRAM
+======================================================================
+
+The city maintains approximately 1.2 million public trees.
+
+Tree maintenance includes pruning, health inspection, storm-damage response, and replacement.
+
+High-risk trees near roads or power infrastructure receive priority inspection.
+
+Tree-removal decisions consider safety, health, and environmental value.
+
+======================================================================
+136. PARKS SYSTEM
+======================================================================
+
+HCA manages 430 public parks.
+
+Major parks have irrigation, lighting, security patrols, and maintenance schedules.
+
+Some sports fields require reservation.
+
+Large events require permits.
+
+Drone use is restricted in certain parks.
+
+======================================================================
+137. EVENT PERMITS
+======================================================================
+
+Public events with more than 500 expected participants generally require an event permit.
+
+Events involving road closures, amplified sound, food sales, or temporary structures may require additional approvals.
+
+Applications should normally be submitted at least 30 days in advance.
+
+Large complex events may require earlier submission.
+
+======================================================================
+138. FIRE DEPARTMENT RESPONSE TARGETS
+======================================================================
+
+The fire department target is to dispatch high-priority urban incidents within 90 seconds after call processing.
+
+Travel-time targets vary by district and incident type.
+
+Response targets are performance objectives, not guarantees for every incident.
+
+Severe weather and simultaneous incidents may affect actual response time.
+
+======================================================================
+139. EMS RESPONSE
+======================================================================
+
+Emergency medical dispatch uses clinical priority categories.
+
+Life-threatening calls receive the highest priority.
+
+Some low-acuity calls may receive telephone clinical assessment before an ambulance is dispatched.
+
+The system aims to use limited emergency resources appropriately.
+
+======================================================================
+140. HOSPITAL CAPACITY DASHBOARD
+======================================================================
+
+The Health Coordination Network receives emergency-capacity indicators from participating hospitals.
+
+Indicators include:
+- emergency-department load;
+- staffed critical-care beds;
+- selected specialty capacity;
+- ambulance offload delay.
+
+Capacity values are operational indicators and may change rapidly.
+
+They are not intended as public guarantees of immediate admission.
+
+======================================================================
+141. PROCUREMENT FRAUD CONTROLS
+======================================================================
+
+High-value supplier changes require verification.
+
+Bank-account changes for vendors require independent confirmation.
+
+Employees should not rely solely on emailed payment instructions.
+
+Suspicious urgent payment requests must be escalated.
+
+These controls are designed to reduce business-email-compromise fraud.
+
+======================================================================
+142. FINANCIAL APPROVAL LIMITS
+======================================================================
+
+Managers may approve routine expenses up to limits defined by role.
+
+Approval limits differ across management levels.
+
+Employees must not split purchases to avoid procurement thresholds.
+
+Artificially dividing a purchase into smaller transactions is prohibited.
+
+======================================================================
+143. LEGAL HOLDS
+======================================================================
+
+When a legal hold is issued, relevant records must be preserved even if normal retention periods have expired.
+
+Deletion processes must honor active holds.
+
+Users should not manually delete held material.
+
+The Legal Department determines when a hold can be released.
+
+======================================================================
+144. RECORDS SEARCH
+======================================================================
+
+Records systems support search by metadata, date, owner, document type, and text where indexing is available.
+
+Search access is permission-controlled.
+
+The ability to find a document does not automatically mean a user is authorized to view it.
+
+======================================================================
+145. DATA EXPORTS
+======================================================================
+
+Large exports of Confidential or Restricted data require additional safeguards.
+
+Exports should be encrypted.
+
+Temporary export files should be deleted after the business need ends.
+
+External transfers require approved channels.
+
+Removable media use is restricted.
+
+======================================================================
+146. ENDPOINT PATCHING
+======================================================================
+
+Managed laptops receive routine security updates automatically.
+
+Critical actively exploited vulnerabilities may trigger expedited updates.
+
+Users may be prompted to restart.
+
+Repeated postponement may eventually lead to forced restart for high-risk updates.
+
+======================================================================
+147. SERVER PATCHING
+======================================================================
+
+Server patching follows service-specific maintenance schedules.
+
+Highly available systems should patch nodes sequentially where possible.
+
+Critical vulnerabilities may require out-of-band patching.
+
+Patch success should be verified.
+
+A server is not considered patched merely because an update command was issued.
+
+======================================================================
+148. CERTIFICATE MANAGEMENT
+======================================================================
+
+Public-facing TLS certificates are centrally monitored.
+
+Certificates should renew automatically where possible.
+
+Alerts are generated before expiration.
+
+Emergency manual renewal procedures exist.
+
+Expired certificates on public services are treated as high-priority incidents.
+
+======================================================================
+149. DNS MANAGEMENT
+======================================================================
+
+Production DNS changes require change tracking.
+
+Critical domains use redundant authoritative DNS providers.
+
+DNSSEC is enabled for selected public domains.
+
+TTL values are selected based on service needs.
+
+Very long TTLs may slow emergency changes.
+
+======================================================================
+150. TIME SYNCHRONIZATION
+======================================================================
+
+Accurate time is required for logs, authentication, distributed systems, and incident analysis.
+
+HCA systems use managed NTP sources.
+
+Critical operational networks have redundant time sources.
+
+Large clock drift may cause authentication or certificate failures.
+
+======================================================================
+151. RAG TEST QUESTIONS
+======================================================================
+
+Direct factual questions:
+1. Who is the Chief Digital Operations Officer?
+2. Which data center is the newest primary facility?
+3. What is the default relational database for new internal systems?
+4. What is the Tier 1 default Recovery Time Objective?
+5. How often are metro vehicle positions normally updated?
+6. What is the default adult metro fare?
+7. Who leads Project Orbit?
+8. When is full Orbit migration planned to complete?
+9. What percentage of municipal electricity consumption comes from buildings?
+10. Who leads Project Solaris?
+11. How many streetlights does HCA manage?
+12. What is the emergency telephone number?
+13. How quickly must the CISO be informed during an S1 incident?
+14. How quickly should internet-facing critical vulnerabilities normally be remediated?
+15. How many online municipal services are available through the Citizen Services Portal?
+16. What is required for verified HeliosID status?
+17. How long are routine web server logs normally retained?
+18. Who leads Project Pulse?
+19. What was the median referral-processing time after the Pulse pilot?
+20. How many pumping stations are operated by Helios Water Services?
+21. Who leads Project Aqua?
+22. How many significant leaks did Aqua help identify in its first year?
+23. How many free bulky-item collections may residents schedule each year?
+24. What is the competitive-tender threshold?
+25. How often must Tier 1 restoration tests occur?
+26. Who leads Project Lantern?
+27. How many candidate chunks does Lantern initially retrieve?
+28. How many chunks are kept after reranking?
+29. What is Lantern's default maximum chunk size?
+30. What is the target unsupported-claim rate for high-risk policy questions?
+31. What is the standard English embedding dimension?
+32. What similarity metric is the default for normalized embeddings?
+33. How many GPUs are in the largest currently operational shared inference cluster?
+34. How many annual-leave days does a full-time employee with 10 completed years receive?
+35. How many annual-leave days does a full-time employee with 16 completed years receive?
+36. How many remote-work days are currently allowed for eligible office-based employees?
+37. What are the four information-classification levels?
+38. Which project aims to reduce permanent privileged access?
+39. What is Project Atlas intended to map?
+40. What is Project Nova intended to modernize?
+41. Who leads RiverGuard?
+42. How far ahead does RiverGuard forecast?
+43. How many public EV charging ports does HCA manage?
+44. What percentage of light-duty municipal vehicles should be zero-emission by 2030?
+45. What is the target completion date for Bridgepoint?
+46. How many intersections are covered by the Project Flow pilot?
+47. What is the normal maximum scooter speed?
+48. How many public parks does HCA manage?
+49. How long should large-event applications normally be submitted in advance?
+50. What is the call-center number for non-emergency municipal services?
+
+Semantic and paraphrase questions:
+51. If Redis Pub/Sub loses a wake-up message, should the system lose the business event?
+52. Why might the city use BM25 in addition to vector similarity?
+53. Why is a reranker not run against the entire corpus?
+54. Can an AI assistant assume Project Orbit uses PostgreSQL because PostgreSQL is the city default?
+55. What happens if a user asks a current-policy question but an archived older policy ranks higher?
+56. If an employee has been at HCA for eight years, how much annual leave do they receive?
+57. Can a life-safety building system be delayed to save energy?
+58. Does a high flood sensor reading automatically trigger evacuation?
+59. Does a high fraud score prove fraud occurred?
+60. Does adding a human reviewer automatically mean meaningful human oversight?
+61. Why can a backup job succeed while the backup is still unreliable?
+62. Why should consumers in event-driven systems be idempotent?
+63. Why does HCA use structural chunking for Lantern?
+64. Why can a newer document still be less authoritative than an older approved one?
+65. Why is a user's historical question different from a current-policy question?
+66. If a password is phished, what actions should the user take?
+67. Why might canary deployment be useful?
+68. Why should destructive database migration steps be delayed?
+69. Why should security alerts be actionable?
+70. Why can a complete dataset still be poor quality?
+
+Multi-hop questions:
+71. Which project is most directly related to improving RAG quality, and what retrieval method does it use?
+72. Which director is responsible for mobility systems, and which major modernization project do they lead?
+73. Which project is associated with flood forecasting, and what improvement did testing show?
+74. Which data center hosts most new compute workloads, and why?
+75. Which project modernizes privileged access, and who leads it?
+76. Which policy would you consult to determine whether current remote work allows two or three days?
+77. Which system stores the source-of-truth event if Redis is used only as a wake-up optimization?
+78. Which project handles health interoperability, and what standard does it use?
+79. Which municipal service has a 90-day booking horizon, and what happens to late cancellations?
+80. Which infrastructure project has a budget of 86 million Helios Credits, and what is its target completion date?
+
+Questions that should NOT be answered from this document:
+81. What is Dr. Mira Voss's salary?
+82. Which university did Hannah Ito attend?
+83. What database does Project Solaris use?
+84. What programming language is Project Orbit written in?
+85. What exact GPU model is used by Lantern?
+86. What is the home address of Leon Markovic?
+87. What vendor supplies the city's hardware security keys?
+88. What is the annual revenue of HCA?
+89. How many employees will HCA have in 2030?
+90. Which cloud provider hosts the Citizen Services Portal?
+91. What is the private mobile number of Dr. Lena Ortiz?
+92. What is the exact make and model of every EV charger?
+93. What is the mayor's political affiliation?
+94. Which employee has the highest salary?
+95. What is the password policy for residents using HeliosID, beyond what is explicitly stated?
+96. What database stores Project Aqua analytics?
+97. What model architecture is used by RiverGuard?
+98. What company provides the cross-encoder reranker?
+99. What GPU model is installed in every DC-EAST AI rack?
+100. What will the population of Helios City be in 2040?
+
+======================================================================
+152. EXPECTED ANSWER KEY
+======================================================================
+
+1. Dr. Mira Voss.
+2. DC-EAST.
+3. PostgreSQL.
+4. 30 minutes.
+5. Every 5 seconds.
+6. 2.80 Helios Credits.
+7. Hannah Ito.
+8. June 2027.
+9. Approximately 41%.
+10. Rafael Mendes.
+11. Approximately 420,000.
+12. 112.
+13. Within 15 minutes.
+14. Within 7 calendar days.
+15. More than 120 services.
+16. Stronger identity evidence using an accepted verification method.
+17. 90 days.
+18. Dr. Lena Ortiz.
+19. 6 hours.
+20. 38 pumping stations.
+21. Samuel Okoro.
+22. 48 significant leaks.
+23. Four free pickups per year.
+24. Purchases above 250,000 Helios Credits normally require competitive tender.
+25. At least quarterly.
+26. Priya Raman.
+27. 30 candidate chunks.
+28. 8 chunks.
+29. Approximately 700 tokens.
+30. Below 1%.
+31. 1,024 dimensions.
+32. Cosine similarity.
+33. 96 GPUs.
+34. 27 days.
+35. 30 days.
+36. Up to three days per week, with manager approval, for eligible office-based employees.
+37. Public, Internal, Confidential, Restricted.
+38. Project Aegis.
+39. Dependencies among critical municipal systems.
+40. Employee devices and endpoint management.
+41. Mei Tan.
+42. Up to six hours ahead.
+43. 1,850 ports.
+44. 70%.
+45. February 2027.
+46. 220 intersections.
+47. 20 km/h.
+48. 430 parks.
+49. At least 30 days in advance for events over 500 people, generally.
+50. 311.
+
+51. No. Redis may only be a wake-up optimization; durable business events should remain in the source-of-truth system such as the database outbox or Kafka workflow.
+52. BM25 is useful for exact terms, codes, identifiers, names, and rare keywords that semantic similarity may miss.
+53. Cross-encoder reranking is slower, so it is applied only to a smaller candidate set.
+54. No. PostgreSQL is a default, not proof of the specific project's implementation.
+55. The system should prefer the active approved current policy for a current-policy question.
+56. 27 days.
+57. No. Life-safety systems are not intentionally delayed for energy optimization.
+58. No. Emergency managers consider multiple factors before evacuation decisions.
+59. No. A high risk score triggers further review; it is not proof of fraud.
+60. No. Oversight must be meaningful, with authority and enough information to challenge or override.
+61. Because successful job completion does not prove the backup can actually be restored.
+62. Because distributed messages may be delivered more than once.
+63. To preserve meaningful semantic and procedural boundaries and improve retrieval quality.
+64. Because a newer document may still be a draft, while an older one may be an approved policy.
+65. Historical questions may require sources that were effective at the historical time, not the current rule.
+66. Report it immediately, change the password if credentials were entered, and notify security so sessions and tokens can be invalidated.
+67. It limits exposure by testing a new release on a small portion of traffic before wider rollout.
+68. To ensure older application versions remain compatible during staged deployment.
+69. Because alerts should lead to meaningful human action rather than create noise.
+70. Completeness and accuracy are different dimensions; a dataset can contain every expected record but contain wrong values.
+
+71. Project Lantern; it uses hybrid retrieval combining dense embeddings and BM25, followed by reranking.
+72. Hannah Ito; she leads Project Orbit.
+73. Project RiverGuard; testing improved warning lead time by an average of 22 minutes.
+74. DC-EAST, because it has the highest available power density and most modern cooling infrastructure.
+75. Project Aegis, led by Leon Markovic.
+76. The current 2026 approved remote-work policy.
+77. A durable source such as the transactional database outbox or Kafka-based event path, depending on the system.
+78. Project Pulse; it uses FHIR-compatible APIs.
+79. Municipal clinic appointments; cancellations less than 6 hours before are marked as late cancellations.
+80. Bridgepoint; target completion is February 2027.
+
+81-100. The document does not provide enough information to answer these questions. A correct RAG system should abstain rather than invent an answer.
+
+======================================================================
+153. RAG EVALUATION NOTES
+======================================================================
+
+This corpus intentionally contains several traps.
+
+Trap A: Global defaults versus project-specific facts.
+Example: PostgreSQL is the default relational database for new systems, but this does not prove that Project Solaris, Orbit, Aqua, RiverGuard, or Lantern use PostgreSQL internally.
+
+Trap B: Similar names.
+Project Atlas is explicitly defined as an infrastructure-dependency mapping program. A retrieval system should avoid confusing it with other hypothetical Atlas projects.
+
+Trap C: Historical versus current policy.
+The archived 2024 remote-work guide allowed two remote days, while the approved 2026 policy allows up to three days. Retrieval quality must consider effective date and document authority.
+
+Trap D: Human oversight.
+The document explicitly says that simply inserting a human into a workflow does not automatically create meaningful oversight.
+
+Trap E: Measurements versus guarantees.
+Emergency response targets, availability targets, and timing objectives are goals, not universal guarantees.
+
+Trap F: Advisory systems versus final authority.
+RiverGuard provides forecasts, but emergency officials decide evacuation orders.
+
+Trap G: Correlation versus fact.
+A high fraud score does not mean fraud definitely occurred.
+
+Trap H: Retrieval versus authorization.
+A search system may technically find a document, but the user may still lack permission to view it.
+
+Trap I: Caching versus source of truth.
+Redis may accelerate systems, but business-critical state must not depend on transient cache state alone.
+
+Trap J: "Newest" does not always mean "authoritative."
+A draft document written yesterday should not automatically override an approved policy issued last year.
+
+End of synthetic RAG evaluation corpus.

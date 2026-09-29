@@ -11,6 +11,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.20 /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY scripts ./scripts
+COPY evals/datasets ./evals/datasets
 
 RUN uv sync --locked --no-dev
 
