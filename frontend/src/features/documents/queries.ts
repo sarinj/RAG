@@ -20,7 +20,11 @@ export function useDocuments() {
     staleTime: 0,
     refetchInterval: (query) => {
       const documents = query.state.data?.pages.flatMap((page) => page.items) ?? [];
-      return hasActiveIngestionJob(documents) ? 2_000 : false;
+      if (!hasActiveIngestionJob(documents)) return false;
+      const embedding = documents.some(
+        (document) => document.latestJob?.status === "processing" && document.latestJob.stage === "embedding",
+      );
+      return embedding ? 500 : 2_000;
     },
     refetchIntervalInBackground: false,
   });

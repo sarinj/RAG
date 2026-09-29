@@ -110,7 +110,8 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
     () => (messagesQuery.data?.pages.flatMap((page) => page.items) ?? []).slice().sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
     [messagesQuery.data],
   );
-  const pendingTurn = messages.some((message) => message.role === "assistant" && message.status === "pending");
+  const [generatingTurn, setGeneratingTurn] = useState<{ requestId: string; content: string; createdAt: string } | null>(null);
+  const pendingTurn = Boolean(generatingTurn) || messages.some((message) => message.role === "assistant" && message.status === "pending");
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const [reconciliation, setReconciliation] = useState<Reconciliation | null>(null);
   const [isCheckingHistory, setIsCheckingHistory] = useState(false);
@@ -165,6 +166,7 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
     if (reconciliation && !afterReconciliation) return;
     const request = createTurnRequest(content);
     const requestId = request.requestId;
+    setGeneratingTurn({ requestId, content, createdAt: new Date().toISOString() });
     const attempt: Reconciliation = {
       requestId,
       content,
@@ -180,6 +182,7 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
       await sendMutation.mutateAsync(request);
       try {
         const found = await updateHistory(requestId, true);
+        setGeneratingTurn(null);
         if (found) {
           setReconciliation(null);
           setSendError(null);
@@ -193,6 +196,7 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
           });
         }
       } catch {
+        setGeneratingTurn(null);
         setReconciliation({
           ...attempt,
           state: "unavailable",
@@ -202,6 +206,7 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
         });
       }
     } catch (error) {
+      setGeneratingTurn(null);
       const message = apiErrorMessage(error);
       setSendError(message);
       const errorCode = error instanceof ApiError ? error.code : undefined;
@@ -269,6 +274,7 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
               {messagesQuery.isError && <ErrorNotice error={messagesQuery.error} title="Saved messages couldn’t load" onRetry={() => void messagesQuery.refetch()} />}
               <MessageList
                 messages={messages}
+                generatingTurn={generatingTurn}
                 isLoading={(messagesQuery.isPending || messagesQuery.isFetchingNextPage) && isApiConfigured()}
                 hasNextPage={Boolean(messagesQuery.hasNextPage)}
                 isFetchingNextPage={messagesQuery.isFetchingNextPage}
@@ -290,9 +296,6 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
                 />
               )}
               {sendError && !reconciliation && <p className="inline-error composer-error" role="alert">{sendError}</p>}
-              {pendingTurn && !reconciliation && (
-                <p className="pending-composer-note" role="status"><LoaderCircle size={14} className="spin" aria-hidden="true" /> A reply is still in progress. A new message will be available when it finishes.</p>
-              )}
               <MessageComposer
                 disabled={!isApiConfigured() || conversationQuery.isError || messagesQuery.isError || pendingTurn || Boolean(reconciliation)}
                 busy={sendMutation.isPending}

@@ -39,8 +39,18 @@ function CitationList({ citations, onCitation }: { citations: Citation[]; onCita
   );
 }
 
+function PendingAnswer({ label }: { label: string }) {
+  return (
+    <div className="pending-answer" role="status" aria-live="polite">
+      <span>{label}</span>
+      <span className="thinking-dots" aria-hidden="true"><i /><i /><i /></span>
+    </div>
+  );
+}
+
 export function MessageList({
   messages,
+  generatingTurn,
   isLoading,
   hasNextPage,
   isFetchingNextPage,
@@ -50,6 +60,7 @@ export function MessageList({
   retryDisabled,
 }: {
   messages: MessageRecord[];
+  generatingTurn: { requestId: string; content: string; createdAt: string } | null;
   isLoading: boolean;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -59,6 +70,7 @@ export function MessageList({
   retryDisabled: boolean;
 }) {
   const turns = useMemo(() => groupTurns(messages), [messages]);
+  const showGeneratingTurn = generatingTurn && !turns.some((turn) => turn.requestId === generatingTurn.requestId);
 
   return (
     <div className="message-history" role="region" aria-label="Conversation messages">
@@ -71,7 +83,7 @@ export function MessageList({
         </div>
       )}
       {isLoading && <LoadingState label="Loading saved conversation" />}
-      {!isLoading && turns.length === 0 && (
+      {!isLoading && turns.length === 0 && !showGeneratingTurn && (
         <div className="chat-first-message">
           <span className="first-message-icon"><MessageSquareText size={22} aria-hidden="true" /></span>
           <h2>What would you like to understand?</h2>
@@ -99,10 +111,7 @@ export function MessageList({
                   {turn.assistant.status === "completed" && <span className="saved-status"><CheckCircle2 size={12} aria-hidden="true" /> Saved</span>}
                 </div>
                 {turn.assistant.status === "pending" && (
-                  <div className="pending-answer" role="status" aria-live="polite">
-                    <LoaderCircle size={17} className="spin" aria-hidden="true" />
-                    <span>Finding an answer in the selected sources…</span>
-                  </div>
+                  <PendingAnswer label="Searching your sources" />
                 )}
                 {turn.assistant.status === "failed" && (
                   <div className="failed-answer" role="alert">
@@ -125,6 +134,24 @@ export function MessageList({
           )}
         </article>
       ))}
+      {showGeneratingTurn && generatingTurn && (
+        <article className="message-turn">
+          <div className="user-message-row">
+            <div className="user-message-content">
+              <div className="message-meta"><span>You</span><time dateTime={generatingTurn.createdAt}>{formatDate(generatingTurn.createdAt)}</time></div>
+              <div className="user-message-bubble">{generatingTurn.content}</div>
+            </div>
+            <span className="message-avatar user-avatar" aria-hidden="true">S</span>
+          </div>
+          <div className="assistant-message-row">
+            <span className="message-avatar assistant-avatar" aria-hidden="true"><MessageSquareText size={16} /></span>
+            <div className="assistant-message-content">
+              <div className="message-meta assistant-meta"><span>Sourcebook</span></div>
+              <PendingAnswer label="Searching your sources" />
+            </div>
+          </div>
+        </article>
+      )}
     </div>
   );
 }

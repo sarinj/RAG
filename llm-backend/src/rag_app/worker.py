@@ -33,7 +33,8 @@ from rag_app.repositories.ingestion import (
 )
 
 logger = logging.getLogger("rag_app.worker")
-EMBEDDING_BATCH_SIZE = 128
+# Persist progress after each chunk so the document list can display real chunk counts.
+EMBEDDING_BATCH_SIZE = 1
 HEARTBEAT_SECONDS = 20
 
 

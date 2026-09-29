@@ -18,6 +18,7 @@ from rag_app.repositories.retrieval import RetrievalRepository, evidence_key
 
 MAX_SELECTED_EVIDENCE = 8
 REPAIR_PROMPT_TOKEN_RESERVE = 128
+REPAIR_MAX_OUTPUT_TOKENS = 64
 INSUFFICIENT_EVIDENCE_ANSWER = (
     "I don’t have enough information in the selected documents to answer that."
 )
@@ -105,7 +106,7 @@ class BaselineChatExecutor:
                 GenerationInput(
                     prompt=repair_prompt,
                     context_window_tokens=self._config.context_window_tokens,
-                    max_output_tokens=self._config.max_output_tokens,
+                    max_output_tokens=min(self._config.max_output_tokens, REPAIR_MAX_OUTPUT_TOKENS),
                     temperature=0,
                     think=False,
                     response_format="json",

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, LoaderCircle } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -46,7 +46,7 @@ export function MessageComposer({ disabled, busy, onSend }: {
         <div className="composer-bottom-actions">
           <span className={draft.length > 7_500 ? "character-count character-count-near-limit" : "character-count"}>{draft.length.toLocaleString()} / 8,000</span>
           <Button type="submit" size="icon" className="send-button" disabled={disabled || busy || !draft.trim()} aria-label="Send message">
-            {busy ? <LoaderCircle size={17} className="spin" aria-hidden="true" /> : <ArrowUp size={18} aria-hidden="true" />}
+            <ArrowUp size={18} aria-hidden="true" />
           </Button>
         </div>
       </div>
