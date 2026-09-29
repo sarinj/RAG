@@ -1,5 +1,7 @@
 # File chat RAG MVP — implementation plan
 
+Use the [service implementation plans](implementation/README.md) for independent agent assignments and the [shared v1 contract](contracts/v1.md) for authoritative API/database details. The contract takes precedence over interface sketches below.
+
 Status: draft pending hardware, file/language, and user-scope answers. Planning only; no application implementation yet.
 
 ## Goal and provisional scope

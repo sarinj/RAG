@@ -1,5 +1,7 @@
 # Project structure and development guide
 
+Use the [service implementation plans](implementation/README.md) for independent agent assignments and the [shared v1 contract](contracts/v1.md) for authoritative API/database details. The contract takes precedence over interface sketches below.
+
 This guide defines the intended structure for the [RAG MVP plan](mvp-implementation-plan.md). The service roots are `frontend`, `backend`, and `llm-backend`. The latter replaces `ai-backend`.
 
 The layouts below are blueprints. Add directories and abstractions when their first implementation needs them; do not generate empty layers for every feature.
