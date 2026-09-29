@@ -1,0 +1,229 @@
+AcmeCloud Internal Knowledge Base
+
+1. Company Overview
+
+AcmeCloud is a fictional cloud infrastructure company founded in 2018 by Alice Morgan and Daniel Chen. The company is headquartered in Singapore and operates data centers in Singapore, Tokyo, Frankfurt, and Sydney.
+
+AcmeCloud provides three main products:
+
+Acme Compute — virtual machines and GPU instances.
+
+Acme Storage — object and block storage.
+
+Acme AI Platform — infrastructure for training and serving machine-learning models.
+
+As of January 2026, AcmeCloud has approximately 1,250 employees and serves more than 18,000 business customers.
+
+The company's largest customer segment is software-as-a-service companies, which represent approximately 42% of total revenue.
+
+2. Acme AI Platform
+
+The Acme AI Platform was launched in March 2024.
+
+The platform allows customers to deploy open-source language models such as Llama, Mistral, and Qwen.
+
+Acme AI Platform supports GPU clusters using NVIDIA H100, NVIDIA H200, and AMD MI300X accelerators.
+
+The default inference engine used by Acme AI Platform is vLLM.
+
+vLLM was selected because it supports continuous batching and PagedAttention, which improve GPU utilization during LLM inference.
+
+Customers can also deploy their own inference engines using Kubernetes.
+
+The maximum number of GPUs supported by a single training cluster is 512 GPUs.
+
+3. Vector Search Service
+
+AcmeCloud introduced Acme Vector Search in November 2024.
+
+Vector Search is primarily designed for semantic search and Retrieval-Augmented Generation applications.
+
+The service supports three similarity metrics:
+
+Cosine similarity
+
+Dot product
+
+Euclidean distance
+
+The recommended similarity metric for normalized text embeddings is cosine similarity.
+
+The default embedding dimension supported by the service is 1,536 dimensions.
+
+However, customers can create indexes with dimensions between 128 and 4,096.
+
+Acme Vector Search uses HNSW as its default approximate nearest-neighbor indexing algorithm.
+
+4. RAG Architecture Recommendation
+
+AcmeCloud recommends the following architecture for production RAG systems:
+
+User Question
+→ Query Embedding
+→ Hybrid Search
+→ Reranking
+→ Context Construction
+→ Large Language Model
+→ Final Answer
+
+Hybrid search combines dense vector search with BM25 keyword search.
+
+Dense retrieval is useful for finding semantically similar documents even when the exact keywords are different.
+
+BM25 is useful when exact terms, product codes, names, or technical identifiers are important.
+
+AcmeCloud recommends retrieving 20 documents during the first retrieval stage.
+
+A reranking model should then reduce these results to approximately 5 documents before they are provided to the LLM.
+
+5. Chunking Guidelines
+
+For general technical documentation, AcmeCloud recommends chunks between 400 and 800 tokens.
+
+The recommended default is 600 tokens with an overlap of 100 tokens.
+
+Smaller chunks can improve retrieval precision but may remove important surrounding context.
+
+Larger chunks preserve more context but can introduce irrelevant information into the LLM prompt.
+
+Documents should normally be split based on semantic boundaries such as headings, paragraphs, or sections instead of splitting text at arbitrary character positions.
+
+For API documentation, AcmeCloud recommends keeping each API endpoint and its examples together in the same chunk whenever possible.
+
+6. Employee Vacation Policy
+
+Full-time employees receive 20 days of paid annual leave each calendar year.
+
+Employees who have worked at AcmeCloud for more than five years receive 25 days of annual leave.
+
+Unused annual leave can be carried forward to the following year.
+
+However, employees may carry forward a maximum of five unused days.
+
+Carried-over leave must be used before March 31 of the following year.
+
+Employees must request leave longer than five consecutive working days at least two weeks in advance.
+
+7. Remote Work Policy
+
+AcmeCloud uses a hybrid work model.
+
+Employees are expected to work from an AcmeCloud office at least two days per week.
+
+Engineering employees may apply for fully remote status if they live more than 100 kilometers from the nearest AcmeCloud office.
+
+Fully remote employees must attend one in-person company gathering every year.
+
+AcmeCloud reimburses remote employees up to USD 800 every two years for home-office equipment.
+
+Internet bills are not covered by the home-office reimbursement program.
+
+8. Security Policy
+
+All employees must enable multi-factor authentication for company accounts.
+
+The company recommends hardware security keys as the preferred MFA method.
+
+Passwords must contain at least 14 characters.
+
+Employees must not store production credentials inside source-code repositories.
+
+Production credentials are stored using Acme Vault.
+
+Acme Vault automatically rotates database credentials every 24 hours.
+
+Administrative production access requires approval from two authorized engineers.
+
+Emergency production access can be granted temporarily for a maximum of four hours.
+
+9. Database Infrastructure
+
+AcmeCloud's primary transactional database is PostgreSQL.
+
+Production PostgreSQL databases use streaming replication with one primary instance and at least two replicas.
+
+Redis is primarily used for caching, distributed locking, rate limiting, and short-lived session information.
+
+Kafka is used for durable asynchronous event processing.
+
+Redis Pub/Sub should not be used when guaranteed message delivery is required because messages can be lost when subscribers are disconnected.
+
+For critical asynchronous workflows, engineers should use Kafka or the database-backed outbox pattern.
+
+10. Notification System
+
+AcmeCloud's internal notification service uses the transactional outbox pattern.
+
+When a business operation occurs, the application performs two actions inside the same database transaction:
+
+Updates the business data.
+
+Inserts an event into the notification_outbox table.
+
+After the transaction commits, a worker reads pending events and delivers the notifications.
+
+Redis Pub/Sub may be used to wake workers quickly, but Redis is not considered the source of truth.
+
+If the Redis notification is lost, workers periodically poll the database and eventually discover the pending event.
+
+Events that fail repeatedly are moved into a dead-letter queue after five failed delivery attempts.
+
+11. Incident Severity Levels
+
+AcmeCloud defines four incident severity levels.
+
+SEV-1 represents a critical production outage affecting a large percentage of customers.
+
+SEV-2 represents major degradation affecting an important service or customer group.
+
+SEV-3 represents a limited production issue with a workaround available.
+
+SEV-4 represents a minor issue that has little or no customer impact.
+
+For SEV-1 incidents, the on-call engineer must acknowledge the alert within five minutes.
+
+A SEV-1 incident requires an incident commander and a dedicated communication channel.
+
+A postmortem must be completed within five business days after the incident is resolved.
+
+12. Project Orion
+
+Project Orion is an internal initiative started in February 2026.
+
+Its goal is to reduce LLM inference costs across the Acme AI Platform.
+
+The project focuses on four techniques:
+
+Continuous batching
+
+KV-cache optimization
+
+Quantization
+
+Model routing
+
+The project's initial target is to reduce average inference cost per one million tokens by 35%.
+
+Project Orion is led by Priya Sharma.
+
+The first production deployment is scheduled for October 2026.
+
+The experimental implementation uses FP8 quantization for selected supported models.
+
+Early internal benchmarks showed approximately 28% lower inference cost compared with the previous serving architecture.
+
+13. Project Aurora
+
+Project Aurora is different from Project Orion.
+
+Aurora focuses on improving the quality of AcmeCloud's enterprise RAG platform.
+
+The project started in May 2026.
+
+Aurora investigates hybrid retrieval, query rewriting, metadata filtering, and cross-encoder reranking.
+
+The team discovered that increasing the number of retrieved documents from 5 to 50 improved recall but frequently reduced final answer quality because too much irrelevant context was passed to the model.
+
+The current Aurora pipeline retrieves 25 candidates and reranks them before selecting the best 6 chunks.
+
+The project is led by Marcus Lee.

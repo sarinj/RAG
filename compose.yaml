@@ -1,0 +1,183 @@
+name: learning-rag
+
+# Local development stack. Copy .env.compose.example to .env, set the model tags
+# and shared token, and provide backend/config/index-config.json before starting.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rag}
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag-local-only}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  migrate:
+    image: learning-rag-backend:local
+    build: ./backend
+    command: ["node", "dist/database/run-migrations.js"]
+    environment: &backend_environment
+      PORT: "3001"
+      CORS_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag-local-only}@postgres:5432/${POSTGRES_DB:-rag}
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
+      INDEX_CONFIG_PATH: /config/index.json
+      INDEX_MODE: ${INDEX_MODE:-baseline}
+      RETRIEVAL_MODE: ${RETRIEVAL_MODE:-vector}
+      LLM_BASE_URL: http://llm-backend:8000
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN in .env}
+      INTERNAL_TIMEOUT_MS: "130000"
+      TURN_EXPIRY_SECONDS: "180"
+    volumes:
+      - type: bind
+        source: ./backend/config/index-config.json
+        target: /config/index.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  llm-backend:
+    image: learning-rag-llm-backend:local
+    build: ./llm-backend
+    environment: &llm_environment
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag-local-only}@postgres:5432/${POSTGRES_DB:-rag}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN in .env}
+      OLLAMA_BASE_URL: http://ollama:11434
+      GENERATION_MODEL: ${GENERATION_MODEL:?Set GENERATION_MODEL in .env}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?Set EMBEDDING_MODEL in .env}
+      INDEX_CONFIG_PATH: /config/index.json
+      TOKENIZER_PATH: /config/tokenizer.json
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
+      GENERATION_TIMEOUT_SECONDS: "120"
+      OLLAMA_GENERATION_CONCURRENCY: "1"
+      OLLAMA_EMBEDDING_CONCURRENCY: "2"
+    volumes:
+      - type: bind
+        source: ./backend/config/index-config.json
+        target: /config/index.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./backend/config/tokenizer.json
+        target: /config/tokenizer.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      # This is process liveness; /health/ready checks database, config, and models.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  llm-worker:
+    image: learning-rag-llm-backend:local
+    build: ./llm-backend
+    command: ["uv", "run", "--no-sync", "rag-worker"]
+    environment:
+      <<: *llm_environment
+      TOKENIZER_PATH: /config/tokenizer.json
+    volumes:
+      - type: bind
+        source: ./backend/config/index-config.json
+        target: /config/index.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./backend/config/tokenizer.json
+        target: /config/tokenizer.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: uploads
+        target: /data/uploads
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 90s
+    restart: unless-stopped
+
+  backend:
+    image: learning-rag-backend:local
+    build: ./backend
+    environment: *backend_environment
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - type: bind
+        source: ./backend/config/index-config.json
+        target: /config/index.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - uploads:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      llm-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health/live').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    image: learning-rag-frontend:local
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001/api}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_data:
+  uploads:

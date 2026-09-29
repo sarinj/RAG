@@ -1,0 +1,52 @@
+{
+  "name": "learning-rag-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NestJS product API and TypeORM schema owner for learning-RAG",
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "test": "npm run typecheck && npm run openapi:export && tsx --test test/*.test.ts",
+    "migration:run": "node dist/database/run-migrations.js",
+    "migration:revert": "node dist/database/revert-migration.js",
+    "migration:run:build": "npm run build && npm run migration:run",
+    "migration:revert:build": "npm run build && npm run migration:revert",
+    "llm-contract:generate": "openapi-ts",
+    "llm-contract:check": "npm run llm-contract:generate && git diff --exit-code -- src/modules/llm-client/generated",
+    "openapi:export": "npm run build && node dist/openapi.js",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "engines": {
+    "node": "^22.13.0 || >=24.11.0"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.1.1",
+    "@nestjs/core": "^12.1.1",
+    "@nestjs/platform-express": "^12.1.1",
+    "@nestjs/swagger": "^12.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "dotenv": "^18.0.4",
+    "pg": "^8.23.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^1.1.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.97.3",
+    "@nestjs/cli": "^12.0.8",
+    "@nestjs/schematics": "^12.0.6",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.10.0",
+    "tsx": "4.23.15",
+    "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "@hey-api/json-schema-ref-parser": {
+      "js-yaml": "4.3.2"
+    }
+  }
+}

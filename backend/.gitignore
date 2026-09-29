@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+data/
+config/index-config.json
+config/tokenizer.json
