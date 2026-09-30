@@ -5,7 +5,6 @@ import re
 from collections.abc import Sequence
 from typing import cast
 
-from rag_app.generation.intents import small_talk_answer
 from rag_app.models import CONTRACT_VERSION, ChatRequest, ChatResponse, Citation, EvidenceRecord
 
 INSUFFICIENT_EVIDENCE_ANSWER = (
@@ -14,26 +13,71 @@ INSUFFICIENT_EVIDENCE_ANSWER = (
 )
 _CITATION_MARKER = re.compile(r"\[S([0-9]+)\]")
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
+
+
+def source_definition_response(
+    request: ChatRequest, evidence: Sequence[EvidenceRecord], subject: str | None
+) -> ChatResponse | None:
+    """Recover an explicit source definition when generation incorrectly abstains."""
+    if subject is None:
+        return None
+    definition_pattern = re.compile(
+        rf"^[\t ]*(?P<definition>(?:the\s+)?(?:(?:project|program|initiative)\s+)?"
+        rf"{re.escape(subject)}\s+(?:is|are|means|refers to)\b[^\r\n]+)",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    matches = [
+        (index, match.group("definition").strip())
+        for index, record in enumerate(evidence, start=1)
+        for match in definition_pattern.finditer(record.chunk.original_text)
+        if match.group("definition").strip().endswith(".")
+    ]
+    # An ambiguous name needs the generation path to distinguish its meanings.
+    if len({definition.casefold() for _, definition in matches}) != 1:
+        return None
+    index, definition = matches[0]
+    return parse_answer(json.dumps({"answer": f"{definition} [S{index}]"}), request, evidence)
+
+
+def source_excerpt_response(
+    request: ChatRequest,
+    evidence: Sequence[EvidenceRecord],
+    draft: str,
+    word_limit: int,
+) -> ChatResponse | None:
+    """Shorten a stubborn draft using a complete source statement matching its opening."""
+    draft_text = " ".join(_CITATION_MARKER.sub("", draft).replace("’", "'").casefold().split())
+    excerpts: list[tuple[int, str]] = []
+    for index, record in enumerate(evidence, start=1):
+        for line in record.chunk.original_text.splitlines():
+            statement = line.strip()
+            if not statement.endswith(".") or statement.endswith(".."):
+                continue
+            if len(statement.split()) + 1 > word_limit:
+                continue
+            prefix = " ".join(statement[:-1].replace("’", "'").casefold().split())
+            if prefix and (
+                draft_text == prefix
+                or any(draft_text.startswith(prefix + boundary) for boundary in (" ", ".", ","))
+            ):
+                excerpts.append((index, statement))
+    for index, statement in sorted(excerpts, key=lambda item: len(item[1].split())):
+        response = parse_answer(
+            json.dumps({"answer": f"{statement} [S{index}]"}), request, evidence
+        )
+        if response is not None:
+            return response
+    return None
+
+
 def parse_answer(
     raw_answer: str,
     request: ChatRequest,
     evidence: Sequence[EvidenceRecord],
 ) -> ChatResponse | None:
-    clean = _THINK_BLOCK.sub("", raw_answer).strip()
-    clean = clean.removeprefix("```json").removesuffix("```").strip()
-    try:
-        decoded_value: object = json.loads(clean)
-    except json.JSONDecodeError:
+    answer = answer_text(raw_answer)
+    if answer is None:
         return None
-    if not isinstance(decoded_value, dict):
-        return None
-    decoded = cast(dict[str, object], decoded_value)
-    if len(decoded) != 1 or "answer" not in decoded:
-        return None
-    answer_value: object = decoded["answer"]
-    if not isinstance(answer_value, str):
-        return None
-    answer = answer_value.strip()
     if answer.casefold() in {"insufficient_evidence", "insufficient evidence"}:
         return insufficient_evidence_response(request)
 
@@ -69,6 +113,25 @@ def parse_answer(
         return None
 
 
+def answer_text(raw_answer: str) -> str | None:
+    """Read the answer field without treating uncited model text as a valid response."""
+    clean = _THINK_BLOCK.sub("", raw_answer).strip()
+    clean = clean.removeprefix("```json").removesuffix("```").strip()
+    try:
+        decoded_value: object = json.loads(clean)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(decoded_value, dict):
+        return None
+    decoded = cast(dict[str, object], decoded_value)
+    if len(decoded) != 1 or "answer" not in decoded:
+        return None
+    answer_value: object = decoded["answer"]
+    if not isinstance(answer_value, str):
+        return None
+    return answer_value.strip()
+
+
 def insufficient_evidence_response(request: ChatRequest) -> ChatResponse:
     return ChatResponse(
         contract_version=CONTRACT_VERSION,
@@ -79,10 +142,7 @@ def insufficient_evidence_response(request: ChatRequest) -> ChatResponse:
     )
 
 
-def small_talk_response(request: ChatRequest) -> ChatResponse | None:
-    answer = small_talk_answer(request.question)
-    if answer is None:
-        return None
+def small_talk_response(request: ChatRequest, answer: str) -> ChatResponse:
     return ChatResponse(
         contract_version=CONTRACT_VERSION,
         request_id=request.request_id,
