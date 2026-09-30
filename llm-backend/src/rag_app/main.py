@@ -15,9 +15,10 @@ from rag_app.api.errors import install_error_handlers
 from rag_app.api.health import ReadinessChecker
 from rag_app.api.router import router
 from rag_app.config import Settings, load_index_configuration
-from rag_app.generation.chat import BaselineChatExecutor, load_tokenizer
+from rag_app.generation.chat import BaselineChatExecutor
 from rag_app.providers.ollama import OllamaProvider
 from rag_app.repositories.database import Database
+from rag_app.tokenization import load_tokenizer
 
 logger = logging.getLogger("rag_app.http")
 
@@ -54,7 +55,10 @@ def create_app(
                         raise ValueError("EMBEDDING_MODEL does not match the shared index config")
                     if app.state.provider is None:
                         raise ValueError("The language model provider is unavailable")
-                    tokenizer = load_tokenizer(active_settings, config)
+                    tokenizer = load_tokenizer(
+                        active_settings.tokenizer_path,
+                        config.tokenizer_version,
+                    )
                     app.state.chat_executor = BaselineChatExecutor(
                         active_database,
                         app.state.provider,

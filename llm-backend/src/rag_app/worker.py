@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
 import json
 import logging
 import signal
@@ -31,6 +30,7 @@ from rag_app.repositories.ingestion import (
     StagedChunk,
     WorkerJob,
 )
+from rag_app.tokenization import load_tokenizer
 
 logger = logging.getLogger("rag_app.worker")
 # Persist progress after each chunk so the document list can display real chunk counts.
@@ -49,19 +49,9 @@ def _emit(event: str, **fields: object) -> None:
 
 
 def _load_tokenizer(settings: Settings, config: IndexConfiguration) -> Tokenizer:
-    path = settings.tokenizer_path
-    if path is None:
-        raise ValueError("TOKENIZER_PATH is not configured")
-    try:
-        file_digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        tokenizer = Tokenizer.from_file(str(path))
-    except Exception as exc:
-        raise ValueError("The configured tokenizer file is unavailable or invalid") from exc
-    if config.tokenizer_version != f"sha256:{file_digest}":
-        raise ValueError("The tokenizer file does not match tokenizerVersion in the index config")
     if config.chunker_version != CHUNKER_VERSION:
         raise ValueError("The configured chunker version is not supported by this worker")
-    return tokenizer
+    return load_tokenizer(settings.tokenizer_path, config.tokenizer_version)
 
 
 async def _check_dependencies() -> int:

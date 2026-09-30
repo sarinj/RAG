@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from rag_app.config import IndexConfiguration
-from rag_app.generation.chat import BaselineChatExecutor
+from rag_app.generation.answers import parse_answer
 from rag_app.models import ChatRequest, EvidenceChunk, EvidenceRecord
 
 
@@ -40,36 +39,11 @@ def test_answer_parser_accepts_only_cited_json_answer() -> None:
         document_id=document_id,
         document_name="report.txt",
     )
-    config = IndexConfiguration.model_validate(
-        {
-            "embeddingModel": "embedding-test:latest",
-            "embeddingDigest": "a" * 64,
-            "embeddingDimension": 3,
-            "chunkTargetTokens": 512,
-            "chunkOverlapTokens": 64,
-            "chunkerVersion": "chunker-v1",
-            "tokenizerVersion": "tokenizer-v1",
-            "contextPromptVersion": None,
-            "contextModel": None,
-            "contextModelDigest": None,
-            "contextWindowTokens": 8192,
-            "maxOutputTokens": 512,
-        }
-    )
-    executor = BaselineChatExecutor(
-        database=object(),  # type: ignore[arg-type]
-        provider=object(),  # type: ignore[arg-type]
-        config=config,
-        tokenizer=object(),  # type: ignore[arg-type]
-    )
-
-    answer = executor._parse_answer(
+    answer = parse_answer(
         '{"answer":"Project Orion is led by Priya Sharma [S1]."}', request, [evidence]
     )
-    unsupported = executor._parse_answer(
-        '{"answer":"INSUFFICIENT_EVIDENCE"}', request, [evidence]
-    )
-    invalid = executor._parse_answer(
+    unsupported = parse_answer('{"answer":"INSUFFICIENT_EVIDENCE"}', request, [evidence])
+    invalid = parse_answer(
         '{"answer":"Project Orion is led by Priya Sharma [S2]."}', request, [evidence]
     )
 
