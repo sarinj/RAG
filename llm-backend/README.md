@@ -12,18 +12,30 @@ Chat uses a LangGraph state graph to orchestrate source/config validation, scope
 
 Install [uv](https://docs.astral.sh/uv/), copy `.env.example` to `.env`, then set `DATABASE_URL`, `INTERNAL_API_TOKEN`, `LLM_PROVIDER`, `GENERATION_MODEL`, `EMBEDDING_MODEL`, `INDEX_CONFIG_PATH`, `TOKENIZER_PATH`, and `UPLOAD_DIR`. Supported generation providers are `ollama`, `openai`, `claude`, `gemini`, and `huggingface`. Embeddings can use `ollama`, `openai`, `gemini`, or `huggingface`. By default, the embedding provider follows `LLM_PROVIDER`; Claude defaults to Ollama because Anthropic does not offer an embedding model. Set `EMBEDDING_PROVIDER` to choose another embedding backend. The index configuration must be the reviewed artifact shared with NestJS; do not create independent Python defaults.
 
-To switch the provider, change runtime configuration only:
+For Compose, use these settings to send both generation and embeddings to OpenAI:
 
 ```dotenv
 LLM_PROVIDER=openai
-LLM_PROVIDER_BASE_URL=https://api.openai.com/v1
+LLM_PROVIDER_BASE_URL=
 LLM_PROVIDER_API_KEY=<provider-key>
-GENERATION_MODEL=<chat-model-id>
-EMBEDDING_MODEL=<embedding-model-id>
-EMBEDDING_MODEL_DIGEST=<64-character-pinned-fingerprint>
+GENERATION_MODEL=gpt-5-nano
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_MODEL_DIGEST=d7facf4722679d2413040d7e0dec9e66ca3b6702d647ff97b5d452be42c37eee
 ```
 
-`openai` uses OpenAI's API by default. It also works with a local server that implements the OpenAI chat-completions, embeddings, and models endpoints; set `LLM_PROVIDER_BASE_URL` to that server's reachable `/v1` endpoint and leave the key blank if it does not require authentication.
+To switch generation back to Ollama while retaining OpenAI embeddings, set:
+
+```dotenv
+LLM_PROVIDER=ollama
+LLM_PROVIDER_BASE_URL=
+EMBEDDING_PROVIDER_API_KEY=<your-openai-api-key>
+GENERATION_MODEL=qwen3:4b
+```
+
+The database vector column is fixed at 1024 dimensions. The OpenAI adapter requests `dimensions=1024` from `text-embedding-3-small`, whose default output is 1536 dimensions. The shared index artifact uses the pinned fingerprint shown above: SHA-256 of `provider=openai;model=text-embedding-3-small;dimensions=1024`. OpenAI lists this embedding model at $0.02 per million input tokens. [`gpt-5-nano`](https://developers.openai.com/api/docs/models/gpt-5-nano) is a low-cost generation model at $0.05 per million input tokens and $0.40 per million output tokens. Both API services are billed by token usage. `openai` uses OpenAI's API by default; it also works with a local server that implements the OpenAI chat-completions, embeddings, and models endpoints.
+
+After changing `.env`, apply the selection with `docker compose up -d --force-recreate llm-backend llm-worker`. Reindex each existing document from the document list before chatting with it; the old Ollama vectors are a different vector space and will not match OpenAI query embeddings. Reindexing calls the paid embeddings API. The OpenAI worker batches up to 32 chunks per request to reduce network overhead. Switching embeddings back to Ollama requires restoring that model's index config and reindexing again.
 
 For Claude, set `LLM_PROVIDER=claude`, provide an Anthropic API key, and use a Claude model ID. Since Claude supplies generation only, embeddings default to Ollama. For example, set `EMBEDDING_PROVIDER=gemini` plus `EMBEDDING_PROVIDER_API_KEY` to use Gemini embeddings with Claude generation.
 
@@ -31,7 +43,7 @@ For Gemini, set `LLM_PROVIDER=gemini`, provide a Gemini API key, and set `GENERA
 
 When `EMBEDDING_PROVIDER` matches `LLM_PROVIDER`, the generation API key and base URL are reused unless the embedding-specific values are set. When they differ, use `EMBEDDING_PROVIDER_BASE_URL` and `EMBEDDING_PROVIDER_API_KEY` to configure the embedding connection separately. Hosted embedding adapters cannot report a stable weight digest, so `EMBEDDING_MODEL_DIGEST` must be an operator-pinned fingerprint that matches `embeddingDigest` in the shared index config. Keep the selected embedding model, fingerprint, and dimension aligned with the existing index.
 
-The tokenizer is a versioned runtime input. For the configured Qwen3 embedding model, fetch the tokenizer JSON from the [Qwen3-Embedding-0.6B model repository](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B):
+The tokenizer is a versioned runtime input used for chunking and token budgets. This workspace keeps its existing Qwen3 tokenizer while sending embeddings to OpenAI. Fetch the tokenizer JSON from the [Qwen3-Embedding-0.6B model repository](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B):
 
 ```sh
 curl -L --fail https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/resolve/main/tokenizer.json \

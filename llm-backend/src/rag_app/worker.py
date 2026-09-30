@@ -22,7 +22,7 @@ from rag_app.ingestion.errors import IngestionFailure, LeaseLost, RetryableInges
 from rag_app.ingestion.parsing import parse_file, resolve_storage_path
 from rag_app.providers.factory import create_provider
 from rag_app.providers.models import EmbeddingInput
-from rag_app.providers.protocols import LLMProvider
+from rag_app.providers.protocols import LLMProvider, ProviderAdapter
 from rag_app.repositories.database import Database
 from rag_app.repositories.ingestion import (
     LEASE_SECONDS,
@@ -37,6 +37,7 @@ from rag_app.tokenization import load_tokenizer
 logger = logging.getLogger("rag_app.worker")
 # Persist progress after each chunk so the document list can display real chunk counts.
 EMBEDDING_BATCH_SIZE = 1
+OPENAI_EMBEDDING_BATCH_SIZE = 32
 HEARTBEAT_SECONDS = 20
 
 
@@ -58,8 +59,8 @@ def _load_tokenizer(settings: Settings, config: IndexConfiguration) -> Tokenizer
 
 async def _check_dependencies() -> int:
     settings = Settings()
-    provider = create_provider(settings)
     database = Database(settings)
+    provider: ProviderAdapter | None = None
     try:
         if settings.upload_dir is None:
             raise ValueError("UPLOAD_DIR is not configured")
@@ -67,6 +68,7 @@ async def _check_dependencies() -> int:
             raise ValueError("UPLOAD_DIR is unavailable")
         config = load_index_configuration(settings.index_config_path)
         _load_tokenizer(settings, config)
+        provider = create_provider(settings, embedding_dimension=config.embedding_dimension)
         if settings.database_dsn is None:
             raise ValueError("DATABASE_URL is not configured")
         await database.open()
@@ -79,7 +81,8 @@ async def _check_dependencies() -> int:
         return 1
     finally:
         await database.close()
-        await provider.close()
+        if provider is not None:
+            await provider.close()
     print(json.dumps({"workerStatus": "dependencies_ready"}))
     return 0
 
@@ -251,8 +254,13 @@ class IngestionWorker:
         await self._repository.check_capacity(job.claim, len(chunks))
         await self._repository.set_stage(job.claim, "embedding", total_chunks=len(chunks))
 
-        for offset in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
-            batch = chunks[offset : offset + EMBEDDING_BATCH_SIZE]
+        batch_size = (
+            OPENAI_EMBEDDING_BATCH_SIZE
+            if self._settings.active_embedding_provider == "openai"
+            else EMBEDDING_BATCH_SIZE
+        )
+        for offset in range(0, len(chunks), batch_size):
+            batch = chunks[offset : offset + batch_size]
             embeddings = await self._embed_batch(job, batch)
             await self._repository.stage_batch(
                 job.claim,
@@ -328,7 +336,7 @@ async def _run_worker() -> int:
         return 1
 
     database = Database(settings)
-    provider = create_provider(settings)
+    provider = create_provider(settings, embedding_dimension=config.embedding_dimension)
     try:
         if settings.database_dsn is None:
             raise ValueError("DATABASE_URL is not configured")

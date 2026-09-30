@@ -27,8 +27,11 @@ class OpenAIProvider:
         self,
         settings: Settings,
         connection: ProviderConnection | None = None,
+        *,
+        embedding_dimension: int | None = None,
     ) -> None:
         self._settings = settings
+        self._embedding_dimension = embedding_dimension
         active_connection = connection or settings.generation_connection
         headers: dict[str, str] = {}
         if active_connection.api_key:
@@ -82,6 +85,10 @@ class OpenAIProvider:
             raise ProviderModelMissing("Embedding model is not configured")
         if embedding_model != config.embedding_model:
             raise ProviderProtocolError("Embedding model differs from the reviewed index config")
+        if self._embedding_dimension != config.embedding_dimension:
+            raise ProviderProtocolError(
+                "OpenAI embedding dimensions differ from the reviewed index config"
+            )
 
         configured_digest = self._settings.embedding_model_digest
         if not configured_digest:
@@ -114,7 +121,9 @@ class OpenAIProvider:
             "max_completion_tokens": request.max_output_tokens,
             "stream": False,
         }
-        if request.temperature is not None:
+        if model.startswith("gpt-5-nano"):
+            body["reasoning_effort"] = "minimal"
+        elif request.temperature is not None and not model.startswith("gpt-5"):
             body["temperature"] = request.temperature
         if request.response_format == "json":
             body["response_format"] = {"type": "json_object"}
@@ -166,12 +175,15 @@ class OpenAIProvider:
             write=self._settings.provider_write_timeout_seconds,
             pool=self._settings.provider_pool_timeout_seconds,
         )
+        body: dict[str, Any] = {"model": model, "input": request.texts}
+        if self._embedding_dimension is not None:
+            body["dimensions"] = self._embedding_dimension
         async with self._embedding_gate:
             payload = await self._request(
                 "POST",
                 "embeddings",
                 timeout=timeout,
-                json={"model": model, "input": request.texts},
+                json=body,
             )
         try:
             data = payload["data"]

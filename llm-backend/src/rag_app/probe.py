@@ -6,7 +6,7 @@ import json
 import sys
 from collections.abc import Sequence
 
-from rag_app.config import Settings
+from rag_app.config import Settings, load_index_configuration
 from rag_app.errors import ProviderError
 from rag_app.providers.factory import create_provider
 from rag_app.providers.models import EmbeddingInput, GenerationInput
@@ -23,7 +23,8 @@ async def probe(settings: Settings, samples: list[str]) -> dict[str, object]:
     if not settings.generation_model or not settings.embedding_model:
         raise ValueError("Set GENERATION_MODEL and EMBEDDING_MODEL before probing")
 
-    provider = create_provider(settings)
+    config = load_index_configuration(settings.index_config_path)
+    provider = create_provider(settings, embedding_dimension=config.embedding_dimension)
     try:
         embedded = await provider.embed(EmbeddingInput(texts=samples))
         generated = await provider.generate(

@@ -44,29 +44,32 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         owns_provider = app.state.provider is None
-        if owns_provider:
-            app.state.provider = create_provider(active_settings)
         try:
+            config = load_index_configuration(active_settings.index_config_path)
+            if owns_provider:
+                app.state.provider = create_provider(
+                    active_settings,
+                    embedding_dimension=config.embedding_dimension,
+                )
             if app.state.chat_executor is None:
-                try:
-                    config = load_index_configuration(active_settings.index_config_path)
-                    if app.state.provider is None:
-                        raise ValueError("The language model provider is unavailable")
-                    tokenizer = load_tokenizer(
-                        active_settings.tokenizer_path,
-                        config.tokenizer_version,
-                    )
-                    app.state.chat_executor = BaselineChatExecutor(
-                        active_database,
-                        app.state.provider,
-                        config,
-                        tokenizer,
-                    )
-                except Exception as exc:
-                    logger.error(
-                        "event=chat_executor_unavailable error_type=%s",
-                        type(exc).__name__,
-                    )
+                if app.state.provider is None:
+                    raise ValueError("The language model provider is unavailable")
+                tokenizer = load_tokenizer(
+                    active_settings.tokenizer_path,
+                    config.tokenizer_version,
+                )
+                app.state.chat_executor = BaselineChatExecutor(
+                    active_database,
+                    app.state.provider,
+                    config,
+                    tokenizer,
+                )
+        except Exception as exc:
+            logger.error(
+                "event=chat_executor_unavailable error_type=%s",
+                type(exc).__name__,
+            )
+        try:
             await active_database.open()
             yield
         finally:

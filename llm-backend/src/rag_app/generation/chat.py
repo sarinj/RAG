@@ -112,7 +112,8 @@ class BaselineChatExecutor:
 
     async def _retrieve(self, state: ChatGraphState) -> dict[str, Any]:
         request = state["request"]
-        query_embedding = await self._provider.embed(EmbeddingInput(texts=[request.question]))
+        retrieval_query = self._prompts.retrieval_query(request.question, state["history"])
+        query_embedding = await self._provider.embed(EmbeddingInput(texts=[retrieval_query]))
         if query_embedding.dimension != self._config.embedding_dimension:
             raise ProviderProtocolError("Query embedding dimension differs from the active index")
 
