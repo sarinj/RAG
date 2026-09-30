@@ -7,18 +7,37 @@ from typing import Any
 from uuid import UUID
 
 from pgvector.psycopg import register_vector_async
-from psycopg import AsyncConnection
-from psycopg import Error as PsycopgError
-from psycopg_pool import AsyncConnectionPool, PoolClosed, PoolTimeout
+from sqlalchemy import column, event, func, select, table, tuple_
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from rag_app.config import Settings
 from rag_app.errors import DatabaseSchemaUnavailable, DatabaseUnavailable
+from rag_app.repositories.orm import Document, IndexGeneration
+
+_PG_ATTRIBUTE = table(
+    "pg_attribute",
+    column("attrelid"),
+    column("attname"),
+    column("atttypid"),
+    column("atttypmod"),
+    column("attnum"),
+    column("attisdropped"),
+    schema="pg_catalog",
+)
 
 
-class PsycopgDatabase:
+class Database:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._pool: AsyncConnectionPool[AsyncConnection[tuple[Any, ...]]] | None = None
+        self._engine: AsyncEngine | None = None
+        self._session_factory: async_sessionmaker[AsyncSession] | None = None
 
     @property
     def configured(self) -> bool:
@@ -29,54 +48,63 @@ class PsycopgDatabase:
         if dsn is None:
             return
 
-        async def configure(connection: AsyncConnection[tuple[Any, ...]]) -> None:
-            await register_vector_async(connection)
+        try:
+            url = make_url(dsn)
+            if url.drivername in {"postgres", "postgresql"}:
+                url = url.set(drivername="postgresql+psycopg")
+            elif url.drivername != "postgresql+psycopg":
+                raise DatabaseUnavailable("DATABASE_URL must use PostgreSQL with psycopg")
 
-        pool: AsyncConnectionPool[AsyncConnection[tuple[Any, ...]]] = AsyncConnectionPool(
-            conninfo=dsn,
-            min_size=self._settings.database_pool_min_size,
-            max_size=self._settings.database_pool_max_size,
-            timeout=self._settings.database_pool_timeout_seconds,
-            configure=configure,
-            open=False,
-        )
-        self._pool = pool
-        await pool.open()
+            engine = create_async_engine(
+                url,
+                pool_size=self._settings.database_pool_max_size,
+                max_overflow=0,
+                pool_timeout=self._settings.database_pool_timeout_seconds,
+            )
+
+            @event.listens_for(engine.sync_engine, "connect")
+            def register_vector(dbapi_connection: Any, _connection_record: Any) -> None:
+                dbapi_connection.run_async(register_vector_async)
+
+            self._engine = engine
+            self._session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        except SQLAlchemyError as exc:
+            raise DatabaseUnavailable("Database is unavailable") from exc
 
     async def close(self) -> None:
-        if self._pool is not None:
-            await self._pool.close()
-            self._pool = None
+        if self._engine is not None:
+            await self._engine.dispose()
+            self._engine = None
+            self._session_factory = None
 
     @asynccontextmanager
-    async def connection(self) -> AsyncGenerator[AsyncConnection[tuple[Any, ...]], None]:
-        if self._pool is None:
+    async def session(self) -> AsyncGenerator[AsyncSession, None]:
+        if self._session_factory is None:
             raise DatabaseUnavailable("Database is not configured")
         try:
-            async with self._pool.connection() as connection:
-                yield connection
-        except (PsycopgError, PoolClosed, PoolTimeout, TimeoutError) as exc:
+            async with self._session_factory() as session:
+                yield session
+        except SQLAlchemyError as exc:
             raise DatabaseUnavailable("Database is unavailable") from exc
 
     async def check_schema(self) -> int:
-        async with self.connection() as connection:
+        async with self.session() as session:
             try:
-                cursor = await connection.execute(
-                    """
-                    SELECT format_type(attribute.atttypid, attribute.atttypmod)
-                    FROM pg_attribute AS attribute
-                    WHERE attribute.attrelid = to_regclass('public.chunks')
-                      AND attribute.attname = 'embedding'
-                      AND attribute.attnum > 0
-                      AND NOT attribute.attisdropped
-                    """
+                statement = select(
+                    func.format_type(_PG_ATTRIBUTE.c.atttypid, _PG_ATTRIBUTE.c.atttypmod)
+                ).where(
+                    _PG_ATTRIBUTE.c.attrelid == func.to_regclass("public.chunks"),
+                    _PG_ATTRIBUTE.c.attname == "embedding",
+                    _PG_ATTRIBUTE.c.attnum > 0,
+                    _PG_ATTRIBUTE.c.attisdropped.is_(False),
                 )
-                row = await cursor.fetchone()
+                result = await session.execute(statement)
+                row = result.scalar_one_or_none()
             except Exception as exc:
                 raise DatabaseSchemaUnavailable("Shared database schema is unavailable") from exc
-        if row is None or not isinstance(row[0], str):
+        if not isinstance(row, str):
             raise DatabaseSchemaUnavailable("Shared chunk embedding column is unavailable")
-        match = re.fullmatch(r"vector\((\d+)\)", row[0])
+        match = re.fullmatch(r"vector\((\d+)\)", row)
         if match is None:
             raise DatabaseSchemaUnavailable("Shared chunk embedding dimension is not fixed")
         return int(match.group(1))
@@ -84,28 +112,24 @@ class PsycopgDatabase:
     async def validate_sources(self, sources: list[tuple[UUID, UUID]]) -> bool:
         if not sources:
             return False
-        document_ids = [document_id for document_id, _ in sources]
-        generation_ids = [generation_id for _, generation_id in sources]
-        async with self.connection() as connection:
+        statement = (
+            select(func.count())
+            .select_from(Document)
+            .join(
+                IndexGeneration,
+                (IndexGeneration.document_id == Document.id)
+                & (IndexGeneration.id == Document.active_generation_id),
+            )
+            .where(
+                tuple_(Document.id, IndexGeneration.id).in_(sources),
+                Document.status == "ready",
+                Document.deleted_at.is_(None),
+                IndexGeneration.status == "ready",
+            )
+        )
+        async with self.session() as session:
             try:
-                cursor = await connection.execute(
-                    """
-                    SELECT count(*)
-                    FROM unnest(%s::uuid[], %s::uuid[])
-                         AS requested(document_id, generation_id)
-                    JOIN documents AS document
-                      ON document.id = requested.document_id
-                    JOIN index_generations AS generation
-                      ON generation.id = requested.generation_id
-                     AND generation.document_id = document.id
-                    WHERE document.status = 'ready'
-                      AND document.deleted_at IS NULL
-                      AND document.active_generation_id = requested.generation_id
-                      AND generation.status = 'ready'
-                    """,
-                    (document_ids, generation_ids),
-                )
-                row = await cursor.fetchone()
-            except Exception as exc:
+                count = await session.scalar(statement)
+            except SQLAlchemyError as exc:
                 raise DatabaseSchemaUnavailable("Shared source schema is unavailable") from exc
-        return row is not None and row[0] == len(sources)
+        return count == len(sources)

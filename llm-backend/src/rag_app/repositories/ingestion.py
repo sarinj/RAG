@@ -3,16 +3,18 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
-from pgvector import Vector
-from psycopg import AsyncConnection
+from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_app.errors import DatabaseUnavailable
 from rag_app.ingestion.chunking import IngestionChunk
 from rag_app.ingestion.errors import CorpusCapacityExceeded, LeaseLost
-from rag_app.repositories.database import PsycopgDatabase
+from rag_app.repositories.database import Database
+from rag_app.repositories.orm import Chunk, Document, IndexGeneration, IngestionJob
 
 IngestionStage = Literal[
     "queued",
@@ -57,151 +59,115 @@ class StagedChunk:
 
 
 class IngestionRepository:
-    def __init__(self, database: PsycopgDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._database = database
 
     async def claim_next(self) -> JobClaim | None:
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                cursor = await connection.execute(
-                    """
-                    SELECT id,document_id,generation_id
-                    FROM ingestion_jobs
-                    WHERE attempts < %s
-                      AND (
-                        status = 'queued'
-                        OR (status = 'processing' AND lease_expires_at <= now())
-                      )
-                    ORDER BY created_at,id
-                    LIMIT 1
-                    FOR UPDATE SKIP LOCKED
-                    """,
-                    (MAX_ATTEMPTS,),
+        async with self._database.session() as session:
+            async with session.begin():
+                statement = (
+                    select(IngestionJob)
+                    .where(
+                        IngestionJob.attempts < MAX_ATTEMPTS,
+                        or_(
+                            IngestionJob.status == "queued",
+                            (IngestionJob.status == "processing")
+                            & (IngestionJob.lease_expires_at <= func.now()),
+                        ),
+                    )
+                    .order_by(IngestionJob.created_at, IngestionJob.id)
+                    .limit(1)
+                    .with_for_update(skip_locked=True)
                 )
-                row = await cursor.fetchone()
-                if row is None:
+                job = await session.scalar(statement)
+                if job is None:
                     return None
-                job_id, document_id, generation_id = row
+
                 lease_token = uuid4()
-                cursor = await connection.execute(
-                    """
-                    UPDATE ingestion_jobs
-                    SET status = 'processing',attempts = attempts + 1,lease_token = %s,
-                        lease_expires_at = now() + (%s * interval '1 second'),
-                        heartbeat_at = now(),error_code = NULL,error_message = NULL,
-                        updated_at = now()
-                    WHERE id = %s
-                    RETURNING attempts
-                    """,
-                    (lease_token, LEASE_SECONDS, job_id),
-                )
-                updated = await cursor.fetchone()
-                if updated is None:
-                    return None
+                job.status = "processing"
+                job.attempts += 1
+                job.lease_token = lease_token
+                job.lease_expires_at = func.now() + timedelta(seconds=LEASE_SECONDS)
+                job.heartbeat_at = func.now()
+                job.error_code = None
+                job.error_message = None
+                job.updated_at = func.now()
                 return JobClaim(
-                    job_id=job_id,
-                    document_id=document_id,
-                    generation_id=generation_id,
+                    job_id=job.id,
+                    document_id=job.document_id,
+                    generation_id=job.generation_id,
                     lease_token=lease_token,
-                    attempts=updated[0],
+                    attempts=job.attempts,
                 )
 
     async def begin(self, claim: JobClaim) -> WorkerJob:
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                document, job = await self._lock_document_job(connection, claim)
-                if document is None:
-                    raise LeaseLost("The document no longer exists")
-                self._require_live_lease(document, job, claim)
-                if document[1] == "deleted" or document[6] is not None:
-                    raise LeaseLost("The document was deleted")
+        async with self._database.session() as session:
+            async with session.begin():
+                document, job, lease_is_live = await self._lock_document_job(session, claim)
+                self._require_live_lease(document, job, lease_is_live, claim)
+                if document is None or job is None:
+                    raise LeaseLost("The document or ingestion job no longer exists")
 
-                cursor = await connection.execute(
-                    """
-                    SELECT mode,status,embedding_model,embedding_digest,embedding_dimension,config
-                    FROM index_generations
-                    WHERE id = %s AND document_id = %s
-                    FOR UPDATE
-                    """,
-                    (claim.generation_id, claim.document_id),
+                generation = await session.scalar(
+                    select(IndexGeneration)
+                    .where(
+                        IndexGeneration.id == claim.generation_id,
+                        IndexGeneration.document_id == claim.document_id,
+                    )
+                    .with_for_update()
                 )
-                generation = await cursor.fetchone()
-                if generation is None or generation[1] not in {"queued", "processing"}:
+                if generation is None or generation.status not in {"queued", "processing"}:
                     raise LeaseLost("The generation is no longer active")
 
-                await connection.execute("SELECT pg_advisory_xact_lock(%s)", (CHUNK_CAPACITY_LOCK,))
-                await connection.execute(
-                    "DELETE FROM chunks WHERE generation_id = %s", (claim.generation_id,)
+                await session.scalar(select(func.pg_advisory_xact_lock(CHUNK_CAPACITY_LOCK)))
+                await session.execute(
+                    delete(Chunk).where(Chunk.generation_id == claim.generation_id)
                 )
-                await connection.execute(
-                    """
-                    UPDATE index_generations
-                    SET status = 'processing',updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (claim.generation_id,),
-                )
-                await connection.execute(
-                    """
-                    UPDATE documents
-                    SET status = CASE
-                      WHEN active_generation_id IS NULL THEN 'processing'
-                      ELSE status
-                    END,
-                    updated_at = now()
-                    WHERE id = %s AND deleted_at IS NULL
-                    """,
-                    (claim.document_id,),
-                )
-                await connection.execute(
-                    """
-                    UPDATE ingestion_jobs
-                    SET stage = 'parsing',processed_chunks = 0,total_chunks = NULL,
-                        error_code = NULL,error_message = NULL,updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (claim.job_id,),
-                )
+                generation.status = "processing"
+                generation.updated_at = func.now()
+                if document.active_generation_id is None:
+                    document.status = "processing"
+                document.updated_at = func.now()
+                job.stage = "parsing"
+                job.processed_chunks = 0
+                job.total_chunks = None
+                job.error_code = None
+                job.error_message = None
+                job.updated_at = func.now()
 
-                raw_config = generation[5]
-                config: Any = raw_config
+                raw_config: Any = generation.config
                 if isinstance(raw_config, str):
-                    config = json.loads(raw_config)
-                if not isinstance(config, Mapping):
+                    raw_config = json.loads(raw_config)
+                if not isinstance(raw_config, Mapping):
                     raise DatabaseUnavailable("Generation configuration is invalid")
-                generation_config = cast(Mapping[str, Any], config)
+                generation_config = cast(Mapping[str, Any], raw_config)
                 return WorkerJob(
                     claim=claim,
-                    storage_key=document[3],
-                    size_bytes=int(document[4]),
-                    content_hash=document[5],
-                    mode=generation[0],
-                    embedding_model=generation[2],
-                    embedding_digest=generation[3],
-                    embedding_dimension=generation[4],
+                    storage_key=document.storage_key,
+                    size_bytes=int(document.size_bytes),
+                    content_hash=document.content_hash,
+                    mode=generation.mode,
+                    embedding_model=generation.embedding_model,
+                    embedding_digest=generation.embedding_digest,
+                    embedding_dimension=generation.embedding_dimension,
                     config=generation_config,
                 )
 
     async def heartbeat(self, claim: JobClaim) -> bool:
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                document, job = await self._lock_document_job(connection, claim)
+        async with self._database.session() as session:
+            async with session.begin():
+                document, job, lease_is_live = await self._lock_document_job(session, claim)
                 if (
                     document is None
-                    or document[6] is not None
-                    or document[1] == "deleted"
-                    or not self._owns_live_lease(job, claim)
+                    or document.deleted_at is not None
+                    or document.status == "deleted"
+                    or not self._owns_live_lease(job, lease_is_live, claim)
                 ):
                     return False
-                await connection.execute(
-                    """
-                    UPDATE ingestion_jobs
-                    SET lease_expires_at = now() + (%s * interval '1 second'),
-                        heartbeat_at = now(),updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (LEASE_SECONDS, claim.job_id),
-                )
+                assert job is not None
+                job.lease_expires_at = func.now() + timedelta(seconds=LEASE_SECONDS)
+                job.heartbeat_at = func.now()
+                job.updated_at = func.now()
                 return True
 
     async def set_stage(
@@ -211,133 +177,120 @@ class IngestionRepository:
         *,
         total_chunks: int | None = None,
     ) -> None:
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                document, job = await self._lock_document_job(connection, claim)
-                self._require_live_lease(document, job, claim)
-                if total_chunks is None:
-                    await connection.execute(
-                        "UPDATE ingestion_jobs SET stage = %s,updated_at = now() WHERE id = %s",
-                        (stage, claim.job_id),
-                    )
-                else:
-                    await connection.execute(
-                        """
-                        UPDATE ingestion_jobs
-                        SET stage = %s,total_chunks = %s,updated_at = now()
-                        WHERE id = %s
-                        """,
-                        (stage, total_chunks, claim.job_id),
-                    )
+        async with self._database.session() as session:
+            async with session.begin():
+                document, job, lease_is_live = await self._lock_document_job(session, claim)
+                self._require_live_lease(document, job, lease_is_live, claim)
+                assert job is not None
+                job.stage = stage
+                if total_chunks is not None:
+                    job.total_chunks = total_chunks
+                job.updated_at = func.now()
 
     async def check_capacity(self, claim: JobClaim, additional_chunks: int) -> None:
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                document, job = await self._lock_document_job(connection, claim)
-                self._require_live_lease(document, job, claim)
-                await connection.execute("SELECT pg_advisory_xact_lock(%s)", (CHUNK_CAPACITY_LOCK,))
-                cursor = await connection.execute(
-                    "SELECT count(*),rag_chunk_capacity_limit() FROM chunks"
-                )
-                row = await cursor.fetchone()
+        async with self._database.session() as session:
+            async with session.begin():
+                document, job, lease_is_live = await self._lock_document_job(session, claim)
+                self._require_live_lease(document, job, lease_is_live, claim)
+                await self._lock_chunk_capacity(session)
+                row = (
+                    await session.execute(
+                        select(func.count(Chunk.id), func.rag_chunk_capacity_limit())
+                    )
+                ).one_or_none()
                 if row is None or row[0] + additional_chunks > row[1]:
                     raise CorpusCapacityExceeded()
 
     async def stage_batch(self, claim: JobClaim, staged: Sequence[StagedChunk]) -> None:
         if not staged:
             return
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                document, job = await self._lock_document_job(connection, claim)
-                self._require_live_lease(document, job, claim)
-                await connection.execute("SELECT pg_advisory_xact_lock(%s)", (CHUNK_CAPACITY_LOCK,))
-                cursor = await connection.execute(
-                    "SELECT count(*),rag_chunk_capacity_limit() FROM chunks"
-                )
-                row = await cursor.fetchone()
+        async with self._database.session() as session:
+            async with session.begin():
+                document, job, lease_is_live = await self._lock_document_job(session, claim)
+                self._require_live_lease(document, job, lease_is_live, claim)
+                await self._lock_chunk_capacity(session)
+                row = (
+                    await session.execute(
+                        select(func.count(Chunk.id), func.rag_chunk_capacity_limit())
+                    )
+                ).one_or_none()
                 if row is None or row[0] + len(staged) > row[1]:
                     raise CorpusCapacityExceeded()
-                await connection.execute(
-                    "SELECT rag_reserve_chunk_capacity(%s)", (len(staged),)
+                await session.scalar(select(func.rag_reserve_chunk_capacity(len(staged))))
+
+                session.add_all(
+                    [
+                        Chunk(
+                            id=uuid4(),
+                            generation_id=claim.generation_id,
+                            ordinal=item.chunk.ordinal,
+                            original_text=item.chunk.original_text,
+                            context_text=None,
+                            searchable_text=item.chunk.original_text,
+                            page_start=item.chunk.page_start,
+                            page_end=item.chunk.page_end,
+                            heading=item.chunk.heading,
+                            source_start=item.chunk.source_start,
+                            source_end=item.chunk.source_end,
+                            token_count=item.chunk.token_count,
+                            embedding=list(item.embedding),
+                        )
+                        for item in staged
+                    ]
                 )
-                values: list[tuple[Any, ...]] = [
-                    (
-                        uuid4(),
-                        claim.generation_id,
-                        item.chunk.ordinal,
-                        item.chunk.original_text,
-                        None,
-                        item.chunk.original_text,
-                        item.chunk.page_start,
-                        item.chunk.page_end,
-                        item.chunk.heading,
-                        item.chunk.source_start,
-                        item.chunk.source_end,
-                        item.chunk.token_count,
-                        Vector(list(item.embedding)),
-                    )
-                    for item in staged
-                ]
-                async with connection.cursor() as cursor:
-                    await cursor.executemany(
-                        """
-                        INSERT INTO chunks (
-                          id,generation_id,ordinal,original_text,context_text,searchable_text,
-                          page_start,page_end,heading,source_start,source_end,token_count,embedding
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        """,
-                        values,
-                    )
-                await connection.execute(
-                    """
-                    UPDATE ingestion_jobs
-                    SET processed_chunks = processed_chunks + %s,updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (len(staged), claim.job_id),
-                )
+                await session.flush()
+                assert job is not None
+                job.processed_chunks += len(staged)
+                job.updated_at = func.now()
 
     async def publish(self, claim: JobClaim) -> None:
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                document, job = await self._lock_document_job(connection, claim)
+        async with self._database.session() as session:
+            async with session.begin():
+                document, job, lease_is_live = await self._lock_document_job(session, claim)
                 if job is None:
                     raise LeaseLost("The ingestion job no longer exists")
-                self._require_live_lease(document, job, claim)
-                if job[5] is None or job[4] != job[5]:
+                self._require_live_lease(document, job, lease_is_live, claim)
+                if job.total_chunks is None or job.processed_chunks != job.total_chunks:
                     raise LeaseLost("The staged chunk count is incomplete")
-                cursor = await connection.execute(
-                    "SELECT count(*) FROM chunks WHERE generation_id = %s",
-                    (claim.generation_id,),
+                count = await session.scalar(
+                    select(func.count())
+                    .select_from(Chunk)
+                    .where(Chunk.generation_id == claim.generation_id)
                 )
-                count_row = await cursor.fetchone()
-                if count_row is None or count_row[0] != job[5]:
+                if count != job.total_chunks:
                     raise LeaseLost("The staged chunk count changed")
-                await connection.execute(
-                    """
-                    UPDATE index_generations
-                    SET status = 'ready',updated_at = now()
-                    WHERE id = %s AND document_id = %s AND status = 'processing'
-                    """,
-                    (claim.generation_id, claim.document_id),
+
+                await session.execute(
+                    update(IndexGeneration)
+                    .where(
+                        IndexGeneration.id == claim.generation_id,
+                        IndexGeneration.document_id == claim.document_id,
+                        IndexGeneration.status == "processing",
+                    )
+                    .values(status="ready", updated_at=func.now())
                 )
-                await connection.execute(
-                    """
-                    UPDATE documents
-                    SET status = 'ready',active_generation_id = %s,updated_at = now()
-                    WHERE id = %s AND deleted_at IS NULL
-                    """,
-                    (claim.generation_id, claim.document_id),
+                await session.execute(
+                    update(Document)
+                    .where(Document.id == claim.document_id, Document.deleted_at.is_(None))
+                    .values(
+                        status="ready",
+                        active_generation_id=claim.generation_id,
+                        updated_at=func.now(),
+                    )
                 )
-                await connection.execute(
-                    """
-                    UPDATE ingestion_jobs
-                    SET status = 'succeeded',stage = 'done',lease_token = NULL,
-                        lease_expires_at = NULL,heartbeat_at = now(),error_code = NULL,
-                        error_message = NULL,updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (claim.job_id,),
+                await session.execute(
+                    update(IngestionJob)
+                    .where(IngestionJob.id == claim.job_id)
+                    .values(
+                        status="succeeded",
+                        stage="done",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        heartbeat_at=func.now(),
+                        error_code=None,
+                        error_message=None,
+                        updated_at=func.now(),
+                    )
                 )
 
     async def fail(
@@ -348,67 +301,67 @@ class IngestionRepository:
         message: str,
         retryable: bool,
     ) -> bool:
-        async with self._database.connection() as connection:
-            async with connection.transaction():
-                document, job = await self._lock_document_job(connection, claim)
+        async with self._database.session() as session:
+            async with session.begin():
+                document, job, lease_is_live = await self._lock_document_job(session, claim)
                 if (
                     document is None
-                    or document[6] is not None
-                    or document[1] == "deleted"
-                    or not self._owns_live_lease(job, claim)
+                    or document.deleted_at is not None
+                    or document.status == "deleted"
+                    or not self._owns_live_lease(job, lease_is_live, claim)
                 ):
                     return False
+                assert job is not None
                 if retryable and claim.attempts < MAX_ATTEMPTS:
-                    await connection.execute(
-                        """
-                        UPDATE ingestion_jobs
-                        SET lease_expires_at = now(),error_code = %s,error_message = %s,
-                            updated_at = now()
-                        WHERE id = %s
-                        """,
-                        (code, message, claim.job_id),
-                    )
+                    job.lease_expires_at = func.now()
+                    job.error_code = code
+                    job.error_message = message
+                    job.updated_at = func.now()
                     return True
-                await self._mark_failed(connection, claim, code, message)
+                await self._mark_failed(session, claim, code, message)
                 return True
 
     async def fail_expired_exhausted(self, batch_size: int = 16) -> int:
-        async with self._database.connection() as connection:
-            cursor = await connection.execute(
-                """
-                SELECT id,document_id,generation_id,lease_token,attempts
-                FROM ingestion_jobs
-                WHERE status = 'processing' AND attempts >= %s AND lease_expires_at <= now()
-                ORDER BY created_at,id
-                LIMIT %s
-                """,
-                (MAX_ATTEMPTS, batch_size),
+        async with self._database.session() as session:
+            result = await session.scalars(
+                select(IngestionJob)
+                .where(
+                    IngestionJob.status == "processing",
+                    IngestionJob.attempts >= MAX_ATTEMPTS,
+                    IngestionJob.lease_expires_at <= func.now(),
+                )
+                .order_by(IngestionJob.created_at, IngestionJob.id)
+                .limit(batch_size)
             )
-            candidates = await cursor.fetchall()
+            candidates = [
+                JobClaim(
+                    job_id=job.id,
+                    document_id=job.document_id,
+                    generation_id=job.generation_id,
+                    lease_token=job.lease_token,
+                    attempts=job.attempts,
+                )
+                for job in result
+                if job.lease_token is not None
+            ]
+
         failed = 0
-        for row in candidates:
-            claim = JobClaim(
-                job_id=row[0],
-                document_id=row[1],
-                generation_id=row[2],
-                lease_token=row[3],
-                attempts=row[4],
-            )
-            async with self._database.connection() as connection:
-                async with connection.transaction():
-                    document, job = await self._lock_document_job(connection, claim)
+        for claim in candidates:
+            async with self._database.session() as session:
+                async with session.begin():
+                    document, job, lease_is_live = await self._lock_document_job(session, claim)
                     if (
                         document is None
-                        or document[6] is not None
-                        or document[1] == "deleted"
+                        or document.deleted_at is not None
+                        or document.status == "deleted"
                         or job is None
-                        or job[0] != "processing"
-                        or job[3] < MAX_ATTEMPTS
-                        or job[2]
+                        or job.status != "processing"
+                        or job.attempts < MAX_ATTEMPTS
+                        or lease_is_live
                     ):
                         continue
                     await self._mark_failed(
-                        connection,
+                        session,
                         claim,
                         "WORKER_ATTEMPTS_EXHAUSTED",
                         "The worker could not process this document after several attempts.",
@@ -418,80 +371,92 @@ class IngestionRepository:
 
     async def _lock_document_job(
         self,
-        connection: AsyncConnection[tuple[Any, ...]],
+        session: AsyncSession,
         claim: JobClaim,
-    ) -> tuple[tuple[Any, ...] | None, tuple[Any, ...] | None]:
-        cursor = await connection.execute(
-            """
-            SELECT id,status,active_generation_id,storage_key,size_bytes,content_hash,deleted_at
-            FROM documents WHERE id = %s FOR UPDATE
-            """,
-            (claim.document_id,),
+    ) -> tuple[Document | None, IngestionJob | None, bool]:
+        document = await session.scalar(
+            select(Document).where(Document.id == claim.document_id).with_for_update()
         )
-        document = await cursor.fetchone()
-        cursor = await connection.execute(
-            """
-            SELECT status,lease_token,lease_expires_at > now(),attempts,
-                   processed_chunks,total_chunks,stage
-            FROM ingestion_jobs WHERE id = %s AND document_id = %s FOR UPDATE
-            """,
-            (claim.job_id, claim.document_id),
+        result = await session.execute(
+            select(IngestionJob, IngestionJob.lease_expires_at > func.now())
+            .where(
+                IngestionJob.id == claim.job_id,
+                IngestionJob.document_id == claim.document_id,
+            )
+            .with_for_update()
         )
-        job = await cursor.fetchone()
-        return document, job
+        row = result.one_or_none()
+        if row is None:
+            return document, None, False
+        job, lease_is_live = row
+        return document, job, bool(lease_is_live)
 
     @staticmethod
-    def _owns_live_lease(job: tuple[Any, ...] | None, claim: JobClaim) -> bool:
+    def _owns_live_lease(
+        job: IngestionJob | None,
+        lease_is_live: bool,
+        claim: JobClaim,
+    ) -> bool:
         return bool(
             job is not None
-            and job[0] == "processing"
-            and job[1] == claim.lease_token
-            and job[2]
+            and job.status == "processing"
+            and job.lease_token == claim.lease_token
+            and lease_is_live
         )
 
     def _require_live_lease(
         self,
-        document: tuple[Any, ...] | None,
-        job: tuple[Any, ...] | None,
+        document: Document | None,
+        job: IngestionJob | None,
+        lease_is_live: bool,
         claim: JobClaim,
     ) -> None:
         if (
             document is None
-            or document[6] is not None
-            or document[1] == "deleted"
-            or not self._owns_live_lease(job, claim)
+            or document.deleted_at is not None
+            or document.status == "deleted"
+            or not self._owns_live_lease(job, lease_is_live, claim)
         ):
             raise LeaseLost("The worker no longer owns this ingestion job")
 
+    @staticmethod
+    async def _lock_chunk_capacity(session: AsyncSession) -> None:
+        await session.scalar(select(func.pg_advisory_xact_lock(CHUNK_CAPACITY_LOCK)))
+
     async def _mark_failed(
         self,
-        connection: AsyncConnection[tuple[Any, ...]],
+        session: AsyncSession,
         claim: JobClaim,
         code: str,
         message: str,
     ) -> None:
-        await connection.execute(
-            """
-            UPDATE index_generations
-            SET status = 'failed',updated_at = now()
-            WHERE id = %s AND document_id = %s AND status IN ('queued','processing')
-            """,
-            (claim.generation_id, claim.document_id),
+        await session.execute(
+            update(IndexGeneration)
+            .where(
+                IndexGeneration.id == claim.generation_id,
+                IndexGeneration.document_id == claim.document_id,
+                IndexGeneration.status.in_(("queued", "processing")),
+            )
+            .values(status="failed", updated_at=func.now())
         )
-        await connection.execute(
-            """
-            UPDATE documents
-            SET status = 'failed',updated_at = now()
-            WHERE id = %s AND deleted_at IS NULL AND active_generation_id IS NULL
-            """,
-            (claim.document_id,),
+        await session.execute(
+            update(Document)
+            .where(
+                Document.id == claim.document_id,
+                Document.deleted_at.is_(None),
+                Document.active_generation_id.is_(None),
+            )
+            .values(status="failed", updated_at=func.now())
         )
-        await connection.execute(
-            """
-            UPDATE ingestion_jobs
-            SET status = 'failed',lease_token = NULL,lease_expires_at = NULL,
-                error_code = %s,error_message = %s,updated_at = now()
-            WHERE id = %s AND status = 'processing'
-            """,
-            (code, message, claim.job_id),
+        await session.execute(
+            update(IngestionJob)
+            .where(IngestionJob.id == claim.job_id, IngestionJob.status == "processing")
+            .values(
+                status="failed",
+                lease_token=None,
+                lease_expires_at=None,
+                error_code=code,
+                error_message=message,
+                updated_at=func.now(),
+            )
         )

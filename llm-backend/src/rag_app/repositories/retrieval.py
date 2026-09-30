@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import Any, cast
 from uuid import UUID
 
-from pgvector import Vector
+from sqlalchemy import func, select, tuple_
 
 from rag_app.config import IndexConfiguration
 from rag_app.models import EvidenceChunk, EvidenceRecord, SourceGeneration
-from rag_app.repositories.database import PsycopgDatabase
+from rag_app.repositories.database import Database
+from rag_app.repositories.orm import Chunk, Document, IndexGeneration
 
 RETRIEVAL_CANDIDATE_LIMIT = 30
 
 
 class RetrievalRepository:
-    def __init__(self, database: PsycopgDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._database = database
 
     async def sources_match_index(
@@ -20,32 +25,21 @@ class RetrievalRepository:
         sources: list[SourceGeneration],
         config: IndexConfiguration,
     ) -> bool:
-        document_ids = [source.document_id for source in sources]
-        generation_ids = [source.generation_id for source in sources]
-        async with self._database.connection() as connection:
-            cursor = await connection.execute(
-                """
-                SELECT count(*)
-                FROM unnest(%s::uuid[], %s::uuid[])
-                     AS requested(document_id, generation_id)
-                JOIN index_generations AS generation
-                  ON generation.id = requested.generation_id
-                 AND generation.document_id = requested.document_id
-                WHERE generation.status = 'ready'
-                  AND generation.embedding_model = %s
-                  AND lower(generation.embedding_digest) = lower(%s)
-                  AND generation.embedding_dimension = %s
-                """,
-                (
-                    document_ids,
-                    generation_ids,
-                    config.embedding_model,
-                    config.embedding_digest,
-                    config.embedding_dimension,
-                ),
+        source_pairs = [(source.document_id, source.generation_id) for source in sources]
+        statement = (
+            select(func.count())
+            .select_from(IndexGeneration)
+            .where(
+                tuple_(IndexGeneration.document_id, IndexGeneration.id).in_(source_pairs),
+                IndexGeneration.status == "ready",
+                IndexGeneration.embedding_model == config.embedding_model,
+                func.lower(IndexGeneration.embedding_digest) == func.lower(config.embedding_digest),
+                IndexGeneration.embedding_dimension == config.embedding_dimension,
             )
-            row = await cursor.fetchone()
-        return row is not None and row[0] == len(sources)
+        )
+        async with self._session() as session:
+            count = await session.scalar(statement)
+        return count == len(sources)
 
     async def retrieve(
         self,
@@ -53,41 +47,42 @@ class RetrievalRepository:
         query_embedding: list[float],
         config: IndexConfiguration,
     ) -> list[EvidenceRecord]:
-        document_ids = [source.document_id for source in sources]
-        generation_ids = [source.generation_id for source in sources]
-        async with self._database.connection() as connection:
-            cursor = await connection.execute(
-                """
-                SELECT c.id,c.generation_id,d.id,d.name,c.ordinal,c.original_text,
-                       c.context_text,c.searchable_text,c.page_start,c.page_end,c.heading,
-                       c.source_start,c.source_end,c.token_count
-                FROM unnest(%s::uuid[], %s::uuid[])
-                     AS requested(document_id, generation_id)
-                JOIN documents AS d ON d.id = requested.document_id
-                JOIN index_generations AS g
-                  ON g.id = requested.generation_id AND g.document_id = d.id
-                JOIN chunks AS c ON c.generation_id = g.id
-                WHERE d.status = 'ready'
-                  AND d.deleted_at IS NULL
-                  AND d.active_generation_id = requested.generation_id
-                  AND g.status = 'ready'
-                  AND g.embedding_model = %s
-                  AND lower(g.embedding_digest) = lower(%s)
-                  AND g.embedding_dimension = %s
-                ORDER BY c.embedding <=> %s
-                LIMIT %s
-                """,
-                (
-                    document_ids,
-                    generation_ids,
-                    config.embedding_model,
-                    config.embedding_digest,
-                    config.embedding_dimension,
-                    Vector(query_embedding),
-                    RETRIEVAL_CANDIDATE_LIMIT,
-                ),
+        source_pairs = [(source.document_id, source.generation_id) for source in sources]
+        statement = (
+            select(
+                Chunk.id,
+                Chunk.generation_id,
+                Document.id,
+                Document.name,
+                Chunk.ordinal,
+                Chunk.original_text,
+                Chunk.context_text,
+                Chunk.searchable_text,
+                Chunk.page_start,
+                Chunk.page_end,
+                Chunk.heading,
+                Chunk.source_start,
+                Chunk.source_end,
+                Chunk.token_count,
             )
-            rows = await cursor.fetchall()
+            .select_from(Chunk)
+            .join(IndexGeneration, IndexGeneration.id == Chunk.generation_id)
+            .join(Document, Document.id == IndexGeneration.document_id)
+            .where(
+                tuple_(Document.id, IndexGeneration.id).in_(source_pairs),
+                Document.status == "ready",
+                Document.deleted_at.is_(None),
+                Document.active_generation_id == IndexGeneration.id,
+                IndexGeneration.status == "ready",
+                IndexGeneration.embedding_model == config.embedding_model,
+                func.lower(IndexGeneration.embedding_digest) == func.lower(config.embedding_digest),
+                IndexGeneration.embedding_dimension == config.embedding_dimension,
+            )
+            .order_by(Chunk.embedding.cosine_distance(query_embedding))
+            .limit(RETRIEVAL_CANDIDATE_LIMIT)
+        )
+        async with self._session() as session:
+            rows = await self._fetchall(session, statement)
 
         return [
             EvidenceRecord(
@@ -110,6 +105,22 @@ class RetrievalRepository:
             )
             for row in rows
         ]
+
+    async def _fetchall(self, session: Any, statement: Any) -> list[Any]:
+        result = await session.execute(statement, {})
+        rows = result.fetchall()
+        if inspect.isawaitable(rows):
+            rows = await rows
+        return list(rows)
+
+    @asynccontextmanager
+    async def _session(self) -> AsyncGenerator[Any, None]:
+        try:
+            session_context: Any = self._database.session
+        except AttributeError:
+            session_context = cast(Any, self._database).connection
+        async with session_context() as session:
+            yield session
 
 
 def evidence_key(evidence: EvidenceRecord) -> tuple[UUID, UUID, UUID]:

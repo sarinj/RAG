@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from rag_app.models import SourceGeneration
-from rag_app.repositories.database import PsycopgDatabase
+from rag_app.repositories.database import Database
 
 
 class DocumentRepository:
-    def __init__(self, database: PsycopgDatabase) -> None:
+    def __init__(self, database: Database) -> None:
         self._database = database
 
     async def snapshot_is_active(self, sources: list[SourceGeneration]) -> bool:

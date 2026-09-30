@@ -22,7 +22,7 @@ from rag_app.ingestion.chunking import CHUNKER_VERSION, IngestionChunk, chunk_do
 from rag_app.ingestion.errors import IngestionFailure, LeaseLost, RetryableIngestionFailure
 from rag_app.ingestion.parsing import parse_file, resolve_storage_path
 from rag_app.providers.ollama import EmbeddingInput, OllamaProvider, find_model
-from rag_app.repositories.database import PsycopgDatabase
+from rag_app.repositories.database import Database
 from rag_app.repositories.ingestion import (
     LEASE_SECONDS,
     MAX_ATTEMPTS,
@@ -67,7 +67,7 @@ def _load_tokenizer(settings: Settings, config: IndexConfiguration) -> Tokenizer
 async def _check_dependencies() -> int:
     settings = Settings()
     provider = OllamaProvider(settings)
-    database = PsycopgDatabase(settings)
+    database = Database(settings)
     try:
         if settings.upload_dir is None:
             raise ValueError("UPLOAD_DIR is not configured")
@@ -117,7 +117,7 @@ class IngestionWorker:
         settings: Settings,
         config: IndexConfiguration,
         tokenizer: Tokenizer,
-        database: PsycopgDatabase,
+        database: Database,
         provider: OllamaProvider,
         stop_event: asyncio.Event,
     ) -> None:
@@ -342,7 +342,7 @@ async def _run_worker() -> int:
         print(json.dumps({"workerStatus": "blocked", "reason": str(exc)}), file=sys.stderr)
         return 1
 
-    database = PsycopgDatabase(settings)
+    database = Database(settings)
     provider = OllamaProvider(settings)
     try:
         if settings.database_dsn is None:

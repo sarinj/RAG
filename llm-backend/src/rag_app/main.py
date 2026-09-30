@@ -17,7 +17,7 @@ from rag_app.api.router import router
 from rag_app.config import Settings, load_index_configuration
 from rag_app.generation.chat import BaselineChatExecutor, load_tokenizer
 from rag_app.providers.ollama import OllamaProvider
-from rag_app.repositories.database import PsycopgDatabase
+from rag_app.repositories.database import Database
 
 logger = logging.getLogger("rag_app.http")
 
@@ -32,12 +32,12 @@ def _request_id(value: str | None) -> str:
 def create_app(
     settings: Settings | None = None,
     *,
-    database: PsycopgDatabase | None = None,
+    database: Database | None = None,
     provider: OllamaProvider | None = None,
     chat_executor: object | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings()
-    active_database = database or PsycopgDatabase(active_settings)
+    active_database = database or Database(active_settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:

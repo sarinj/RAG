@@ -14,7 +14,7 @@ from rag_app.config import IndexConfiguration, Settings
 from rag_app.errors import ProviderProtocolError, ServiceError
 from rag_app.models import ChatRequest, ChatResponse, Citation, EvidenceRecord
 from rag_app.providers.ollama import EmbeddingInput, GenerationInput, OllamaProvider
-from rag_app.repositories.database import PsycopgDatabase
+from rag_app.repositories.database import Database
 from rag_app.repositories.retrieval import RetrievalRepository, evidence_key
 
 MAX_SELECTED_EVIDENCE = 8
@@ -40,7 +40,7 @@ class ChatGraphState(TypedDict):
 class BaselineChatExecutor:
     def __init__(
         self,
-        database: PsycopgDatabase,
+        database: Database,
         provider: OllamaProvider,
         config: IndexConfiguration,
         tokenizer: Tokenizer,
