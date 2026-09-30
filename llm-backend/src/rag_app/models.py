@@ -98,6 +98,23 @@ class ChatResponse(WireModel):
         return self
 
 
+class RetrievedCandidate(WireModel):
+    chunk_id: UUID
+    source_start: int = Field(ge=0)
+    source_end: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_source_range(self) -> RetrievedCandidate:
+        if self.source_end <= self.source_start:
+            raise ValueError("retrieved chunk source range must be nonempty")
+        return self
+
+
+class EvaluationChatResponse(WireModel):
+    response: ChatResponse
+    retrieval_candidates: list[RetrievedCandidate]
+
+
 class ErrorEnvelope(WireModel):
     code: str
     message: str

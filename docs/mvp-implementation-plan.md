@@ -85,7 +85,7 @@ Deletion first makes the document unavailable to retrieval, cancels jobs, then r
 2. For follow-ups, Python may rewrite the question using a bounded conversation history. History helps resolve references; it is not factual evidence.
 3. Embed the query using the indexed embedding model and its prescribed query formatting. Retrieve up to 30 vector candidates with document/generation filters applied in SQL.
 4. Load only scoped active chunks for BM25, using the same tokenizer for queries and corpus. Initially rebuild per request under the small corpus cap; optimize with a generation-aware cache only when measurements justify it. Thai requires a language-aware tokenizer and dedicated evaluation.
-5. Retrieve up to 30 BM25 matches; discard zero-match candidates. Fuse by chunk ID using `sum(weight / (60 + rank))`, starting with equal weights. Keep roughly 5–8 chunks within the answer token budget.
+5. Retrieve up to 30 BM25 and 30 vector matches; discard lexical misses. Fuse by chunk ID using `sum(weight / (60 + rank))`, starting with equal weights. Rerank the best 30 candidates, then select up to five chunks within the answer token budget.
 6. Give the model original excerpts and source labels with relevant headings/neighbor text. Generated chunk descriptions aid search but are not citable evidence.
 7. Prompt for grounded answers, citations, and an explicit insufficient-evidence response. Treat document instructions as untrusted text. Do not equate retrieval similarity with confidence.
 8. Validate citation IDs against the supplied evidence; invalid citations trigger one constrained repair or an explicit failed answer. Citation validity does not prove factual support, so evaluate grounding separately.

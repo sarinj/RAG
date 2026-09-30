@@ -156,7 +156,7 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
         question: content,
         history: created.history,
         sources: created.sources,
-        retrievalMode: this.config.retrievalMode,
+        retrievalMode: this.indexingArtifact().retrievalMode,
       }, requestHeaderId);
       const citationRows = await this.validateCitations(response, created.sources);
       await this.completeTurn(created.turnId, response, citationRows);
@@ -260,12 +260,7 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
   }
 
   private async assertCompatibleIndex(generationIds: string[]): Promise<void> {
-    let artifact;
-    try {
-      artifact = readIndexingArtifact(this.config);
-    } catch {
-      throw unavailable('MODEL_UNAVAILABLE', 'The shared indexing configuration is missing or invalid.');
-    }
+    const artifact = this.indexingArtifact();
     const generations = await this.dataSource.query<{ embedding_model: string; embedding_digest: string; embedding_dimension: number }[]>(
       `SELECT embedding_model,embedding_digest,embedding_dimension FROM index_generations WHERE id = ANY($1::uuid[])`, [generationIds],
     );
@@ -276,6 +271,14 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
     );
     if (!compatible || generations.length !== generationIds.length) {
       throw conflict('INDEX_CONFIG_MISMATCH', 'The selected documents use an embedding configuration that is not active.');
+    }
+  }
+
+  private indexingArtifact() {
+    try {
+      return readIndexingArtifact(this.config);
+    } catch {
+      throw unavailable('MODEL_UNAVAILABLE', 'The shared indexing configuration is missing or invalid.');
     }
   }
 

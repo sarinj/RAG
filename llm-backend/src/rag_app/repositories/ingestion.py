@@ -55,6 +55,8 @@ class WorkerJob:
 @dataclass(frozen=True, slots=True)
 class StagedChunk:
     chunk: IngestionChunk
+    context_text: str | None
+    searchable_text: str
     embedding: Sequence[float]
 
 
@@ -225,8 +227,8 @@ class IngestionRepository:
                             generation_id=claim.generation_id,
                             ordinal=item.chunk.ordinal,
                             original_text=item.chunk.original_text,
-                            context_text=None,
-                            searchable_text=item.chunk.original_text,
+                            context_text=item.context_text,
+                            searchable_text=item.searchable_text,
                             page_start=item.chunk.page_start,
                             page_end=item.chunk.page_end,
                             heading=item.chunk.heading,

@@ -8,7 +8,7 @@ from tokenizers import Tokenizer
 from rag_app.errors import ServiceError
 from rag_app.models import ChatRequest, EvidenceRecord
 
-MAX_SELECTED_EVIDENCE = 8
+MAX_SELECTED_EVIDENCE = 5
 
 
 class ChatPromptBuilder:
@@ -35,19 +35,6 @@ class ChatPromptBuilder:
                     "The question exceeds the model context limit.",
                 )
             history = history[2:]
-
-    @staticmethod
-    def retrieval_query(question: str, history: list[dict[str, str]]) -> str:
-        """Carry the latest conversational reference into vector retrieval."""
-        if len(history) < 2:
-            return question
-
-        previous_user, previous_assistant = history[-2:]
-        return (
-            f"Previous question: {previous_user['content']}\n"
-            f"Previous answer: {previous_assistant['content']}\n"
-            f"Follow-up question: {question}"
-        )
 
     def select_evidence(
         self,

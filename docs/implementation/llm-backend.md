@@ -73,7 +73,7 @@ Depends on LLM-02 and reviewed internal contract; integrate with BE-03/04.
 
 Acceptance: real requests return validated source IDs, selected scope cannot leak other documents, model outage/timeout maps to contract errors, and baseline report identifies model/config/dataset versions. Do not claim valid citations alone prove grounding.
 
-## LLM-04 — Contextual indexing
+## LLM-04 — Contextual indexing (implemented)
 
 Depends on a saved baseline and BE-05 reindex protocol.
 
@@ -86,17 +86,17 @@ Depends on a saved baseline and BE-05 reindex protocol.
 
 Acceptance: contextualization runs during ingestion only; answers/citation source bodies still use original text; failed replacement leaves old generation usable; contextual report records actual gains or regressions.
 
-## LLM-05 — BM25 and fusion
+## LLM-05 — BM25 and fusion (implemented)
 
 Depends on LLM-04 and language/tokenizer decision.
 
 1. Tokenize both queries and searchable_text consistently; use appropriate segmentation for required languages.
 2. Build BM25 over exactly the requested active source snapshot. Start with per-request rebuilding under the corpus cap; no unversioned cache.
 3. Retrieve up to 30 lexical and 30 vector candidates. Remove lexical nonmatches, deduplicate by chunk ID, and apply equal-weight RRF with constant 60 initially.
-4. Deterministically break ties; select approximately 5–8 chunks subject to evidence token budget. Reranking remains optional future work.
+4. Deterministically break ties; fuse the best 30 candidates and rerank them before selecting up to five chunks subject to the evidence token budget.
 5. Evaluate vector baseline, contextual vector, and contextual hybrid with fixed datasets. Tune on tuning questions only and report held-out results separately.
 
-Acceptance: exact terms and paraphrases are represented in evaluation, scope is identical for both retrieval paths, no lexical hit does not fabricate a BM25 candidate, and runtime latency is measured before enabling hybrid defaults.
+Acceptance: exact terms and paraphrases are represented in evaluation, scope is identical for both retrieval paths, lexical misses do not fabricate BM25 candidates, and retrieval mode comes from the shared index configuration.
 
 ## LLM-06 — Final service readiness
 

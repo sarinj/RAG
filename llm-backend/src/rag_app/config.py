@@ -236,6 +236,7 @@ class IndexConfiguration(BaseModel):
     context_model_digest: str | None = Field(pattern=r"^[a-fA-F0-9]{64}$")
     context_window_tokens: StrictInt = Field(gt=0)
     max_output_tokens: StrictInt = Field(gt=0)
+    retrieval_mode: Literal["vector", "hybrid"] = "hybrid"
 
     @model_validator(mode="after")
     def validate_consistency(self) -> IndexConfiguration:

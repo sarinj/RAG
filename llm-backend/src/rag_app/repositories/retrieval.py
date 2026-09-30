@@ -14,6 +14,7 @@ from rag_app.repositories.database import Database
 from rag_app.repositories.orm import Chunk, Document, IndexGeneration
 
 RETRIEVAL_CANDIDATE_LIMIT = 30
+ACTIVE_CHUNK_LIMIT = 5_000
 
 
 class RetrievalRepository:
@@ -47,8 +48,30 @@ class RetrievalRepository:
         query_embedding: list[float],
         config: IndexConfiguration,
     ) -> list[EvidenceRecord]:
+        statement = self._active_statement(sources, config).order_by(
+            Chunk.embedding.cosine_distance(query_embedding), Chunk.id
+        ).limit(RETRIEVAL_CANDIDATE_LIMIT)
+        async with self._session() as session:
+            rows = await self._fetchall(session, statement)
+        return self._evidence_records(rows)
+
+    async def retrieve_active(
+        self,
+        sources: list[SourceGeneration],
+        config: IndexConfiguration,
+    ) -> list[EvidenceRecord]:
+        """Load the active, source-scoped corpus used to rebuild per-request BM25."""
+        statement = self._active_statement(sources, config).order_by(Chunk.id).limit(
+            ACTIVE_CHUNK_LIMIT
+        )
+        async with self._session() as session:
+            rows = await self._fetchall(session, statement)
+        return self._evidence_records(rows)
+
+    @staticmethod
+    def _active_statement(sources: list[SourceGeneration], config: IndexConfiguration) -> Any:
         source_pairs = [(source.document_id, source.generation_id) for source in sources]
-        statement = (
+        return (
             select(
                 Chunk.id,
                 Chunk.generation_id,
@@ -78,12 +101,10 @@ class RetrievalRepository:
                 func.lower(IndexGeneration.embedding_digest) == func.lower(config.embedding_digest),
                 IndexGeneration.embedding_dimension == config.embedding_dimension,
             )
-            .order_by(Chunk.embedding.cosine_distance(query_embedding))
-            .limit(RETRIEVAL_CANDIDATE_LIMIT)
         )
-        async with self._session() as session:
-            rows = await self._fetchall(session, statement)
 
+    @staticmethod
+    def _evidence_records(rows: list[Any]) -> list[EvidenceRecord]:
         return [
             EvidenceRecord(
                 chunk=EvidenceChunk(

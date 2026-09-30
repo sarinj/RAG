@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 DATASET_DIRECTORY = Path(__file__).resolve().parents[3] / "evals" / "datasets"
@@ -15,6 +16,7 @@ class EvaluationCase:
     category: str
     question: str
     expected_answer: str | None
+    evidence_spans: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,10 +33,87 @@ class EvaluationDataset:
 
 
 def load_datasets() -> dict[str, EvaluationDataset]:
-    return {
+    datasets = {
         "astrarail": _load_astrarail(),
         "helios_city": _load_helios_city(),
     }
+    label_path = DATASET_DIRECTORY / "retrieval_labels.json"
+    label_bytes = label_path.read_bytes()
+    label_data = json.loads(label_bytes)
+    if not isinstance(label_data, dict) or not isinstance(label_data.get("datasets"), dict):
+        raise ValueError("Retrieval labels must contain a datasets object")
+    label_version = label_data.get("version")
+    if not isinstance(label_version, str) or not label_version.strip():
+        raise ValueError("Retrieval labels must have a nonempty version")
+
+    dataset_labels = label_data["datasets"]
+    if set(dataset_labels) != set(datasets):
+        raise ValueError("Retrieval labels must match the bundled evaluation datasets")
+    return {
+        slug: _attach_retrieval_labels(dataset, dataset_labels[slug], label_version)
+        for slug, dataset in datasets.items()
+    }
+
+
+def _attach_retrieval_labels(
+    dataset: EvaluationDataset,
+    raw_labels: object,
+    label_version: str,
+) -> EvaluationDataset:
+    if not isinstance(raw_labels, dict):
+        raise ValueError(f"Retrieval labels for {dataset.slug} must be an object")
+    cases_by_id = {case.case_id: case for case in dataset.cases}
+    unknown_ids = set(raw_labels) - set(cases_by_id)
+    if unknown_ids:
+        raise ValueError(f"Retrieval labels for {dataset.slug} contain unknown cases")
+
+    text = unicodedata.normalize(
+        "NFC",
+        dataset.corpus_text.replace("\r\n", "\n").replace("\r", "\n"),
+    )
+    labeled_cases: list[EvaluationCase] = []
+    for case in dataset.cases:
+        raw_evidence = raw_labels.get(case.case_id, [])
+        if not isinstance(raw_evidence, list) or not all(
+            isinstance(item, str) and item.strip() for item in raw_evidence
+        ):
+            raise ValueError(
+                f"Retrieval evidence for {dataset.slug} case {case.case_id} must be nonempty text"
+            )
+        if raw_evidence and case.expected_answer is None:
+            raise ValueError(
+                f"Unanswerable case {dataset.slug} {case.case_id} cannot have gold evidence"
+            )
+
+        spans = tuple(
+            _find_unique_span(text, snippet, dataset.slug, case.case_id)
+            for snippet in raw_evidence
+        )
+        labeled_cases.append(replace(case, evidence_spans=spans))
+
+    labels_hash_input = json.dumps(
+        {"version": label_version, "labels": raw_labels},
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    combined_source_hash = _sha256(
+        bytes.fromhex(dataset.source_sha256) + b"\0" + labels_hash_input
+    )
+    return replace(
+        dataset,
+        source_sha256=combined_source_hash,
+        cases=tuple(labeled_cases),
+    )
+
+
+def _find_unique_span(text: str, snippet: str, dataset_slug: str, case_id: str) -> tuple[int, int]:
+    start = text.find(snippet)
+    if start < 0 or text.find(snippet, start + 1) >= 0:
+        raise ValueError(
+            f"Retrieval evidence for {dataset_slug} case {case_id} must match exactly once"
+        )
+    return start, start + len(snippet)
 
 
 def _load_astrarail() -> EvaluationDataset:

@@ -16,6 +16,7 @@ export const IndexingArtifactSchema = z.object({
   contextModelDigest: z.string().min(1).nullable(),
   contextWindowTokens: z.number().int().positive(),
   maxOutputTokens: z.number().int().positive(),
+  retrievalMode: z.enum(['vector', 'hybrid']).default('hybrid'),
 }).passthrough().superRefine((artifact, context) => {
   if (artifact.chunkOverlapTokens >= artifact.chunkTargetTokens) {
     context.addIssue({ code: 'custom', message: 'chunk overlap must be less than chunk target' });

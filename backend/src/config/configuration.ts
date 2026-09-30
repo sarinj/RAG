@@ -11,7 +11,6 @@ const EnvironmentSchema = z.object({
   MAX_FILES: z.coerce.number().int().positive().default(100),
   INDEX_CONFIG_PATH: z.string().min(1).default('./config/index-config.json'),
   INDEX_MODE: z.enum(['baseline', 'contextual']).default('baseline'),
-  RETRIEVAL_MODE: z.enum(['vector', 'hybrid']).default('vector'),
   LLM_BASE_URL: z.string().url().default('http://localhost:8000'),
   INTERNAL_API_TOKEN: z.string().optional(),
   INTERNAL_TIMEOUT_MS: z.coerce.number().int().positive().default(130_000),
@@ -31,7 +30,6 @@ export type ServerConfig = {
   maxFiles: number;
   indexConfigPath: string;
   indexMode: 'baseline' | 'contextual';
-  retrievalMode: 'vector' | 'hybrid';
   llmBaseUrl: string;
   internalApiToken?: string;
   internalTimeoutMs: number;
@@ -55,7 +53,6 @@ export function parseServerConfig(env: NodeJS.ProcessEnv = process.env): ServerC
     maxFiles: value.MAX_FILES,
     indexConfigPath: value.INDEX_CONFIG_PATH,
     indexMode: value.INDEX_MODE,
-    retrievalMode: value.RETRIEVAL_MODE,
     llmBaseUrl: value.LLM_BASE_URL.replace(/\/$/, ''),
     internalApiToken: value.INTERNAL_API_TOKEN,
     internalTimeoutMs: value.INTERNAL_TIMEOUT_MS,

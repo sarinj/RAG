@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
@@ -10,11 +11,14 @@ from rag_app.config import IndexConfiguration
 from rag_app.errors import ProviderProtocolError, ServiceError
 from rag_app.generation.answers import insufficient_evidence_response, parse_answer
 from rag_app.generation.prompts import ChatPromptBuilder
+from rag_app.generation.query_rewriting import rewrite_query
+from rag_app.generation.reranking import rerank_candidates
 from rag_app.models import ChatRequest, ChatResponse, EvidenceRecord
 from rag_app.providers.models import EmbeddingInput, GenerationInput
 from rag_app.providers.protocols import LLMProvider
 from rag_app.repositories.database import Database
 from rag_app.repositories.retrieval import RetrievalRepository, evidence_key
+from rag_app.retrieval.hybrid import bm25_candidates, reciprocal_rank_fusion
 
 REPAIR_PROMPT_TOKEN_RESERVE = 128
 REPAIR_MAX_OUTPUT_TOKENS = 64
@@ -23,7 +27,9 @@ REPAIR_MAX_OUTPUT_TOKENS = 64
 class ChatGraphState(TypedDict):
     request: ChatRequest
     history: list[dict[str, str]]
+    retrieval_query: str
     candidates: list[EvidenceRecord]
+    reranked_candidates: list[EvidenceRecord]
     selected: list[EvidenceRecord]
     prompt: str
     response: ChatResponse | None
@@ -41,6 +47,7 @@ class BaselineChatExecutor:
         self._retrieval = RetrievalRepository(database)
         self._provider = provider
         self._config = config
+        self._tokenizer = tokenizer
         prompt_limit = (
             config.context_window_tokens
             - config.max_output_tokens
@@ -49,22 +56,26 @@ class BaselineChatExecutor:
         self._prompts = ChatPromptBuilder(tokenizer, prompt_limit)
         graph = cast(Any, StateGraph)(ChatGraphState)
         graph.add_node("prepare", self._prepare)
+        graph.add_node("rewrite_query", self._rewrite_query)
         graph.add_node("retrieve", self._retrieve)
+        graph.add_node("rerank", self._rerank)
         graph.add_node("select_evidence", self._select_evidence_node)
         graph.add_node("insufficient_evidence", self._insufficient_evidence_node)
         graph.add_node("generate", self._generate)
         graph.add_node("repair", self._repair)
         graph.add_node("finalize", self._finalize)
         graph.add_edge(cast(Any, START), "prepare")
-        graph.add_edge("prepare", "retrieve")
+        graph.add_edge("prepare", "rewrite_query")
+        graph.add_edge("rewrite_query", "retrieve")
         graph.add_conditional_edges(
             "retrieve",
             self._route_after_retrieval,
             {
-                "select_evidence": "select_evidence",
+                "rerank": "rerank",
                 "insufficient_evidence": "insufficient_evidence",
             },
         )
+        graph.add_edge("rerank", "select_evidence")
         graph.add_edge("select_evidence", "generate")
         graph.add_conditional_edges(
             "generate",
@@ -81,7 +92,9 @@ class BaselineChatExecutor:
         initial_state: ChatGraphState = {
             "request": request,
             "history": [],
+            "retrieval_query": request.question,
             "candidates": [],
+            "reranked_candidates": [],
             "selected": [],
             "prompt": "",
             "response": None,
@@ -110,30 +123,64 @@ class BaselineChatExecutor:
 
         return {"history": self._prompts.fit_history(request)}
 
+    async def _rewrite_query(self, state: ChatGraphState) -> dict[str, Any]:
+        request = state["request"]
+        retrieval_query = await rewrite_query(
+            self._provider,
+            self._tokenizer,
+            question=request.question,
+            history=state["history"],
+            context_window_tokens=self._config.context_window_tokens,
+            max_output_tokens=self._config.max_output_tokens,
+        )
+        return {"retrieval_query": retrieval_query}
+
     async def _retrieve(self, state: ChatGraphState) -> dict[str, Any]:
         request = state["request"]
-        retrieval_query = self._prompts.retrieval_query(request.question, state["history"])
+        retrieval_query = state["retrieval_query"]
         query_embedding = await self._provider.embed(EmbeddingInput(texts=[retrieval_query]))
         if query_embedding.dimension != self._config.embedding_dimension:
             raise ProviderProtocolError("Query embedding dimension differs from the active index")
 
-        candidates = await self._retrieval.retrieve(
+        vector_candidates = await self._retrieval.retrieve(
             request.sources,
             query_embedding.vectors[0],
             self._config,
         )
+        if request.retrieval_mode == "hybrid":
+            scoped_chunks = await self._retrieval.retrieve_active(request.sources, self._config)
+            lexical_candidates = await asyncio.to_thread(
+                bm25_candidates,
+                retrieval_query,
+                scoped_chunks,
+                self._tokenizer,
+            )
+            candidates = reciprocal_rank_fusion(vector_candidates, lexical_candidates)
+        else:
+            candidates = vector_candidates
         return {"candidates": candidates}
 
     @staticmethod
     def _route_after_retrieval(state: ChatGraphState) -> str:
-        return "select_evidence" if state.get("candidates") else "insufficient_evidence"
+        return "rerank" if state.get("candidates") else "insufficient_evidence"
+
+    async def _rerank(self, state: ChatGraphState) -> dict[str, Any]:
+        ranked = await rerank_candidates(
+            self._provider,
+            self._tokenizer,
+            query=state["retrieval_query"],
+            candidates=state["candidates"],
+            context_window_tokens=self._config.context_window_tokens,
+            max_output_tokens=self._config.max_output_tokens,
+        )
+        return {"reranked_candidates": ranked}
 
     def _select_evidence_node(self, state: ChatGraphState) -> dict[str, Any]:
         request = state["request"]
         selected, prompt = self._prompts.select_evidence(
             request.question,
             state["history"],
-            state["candidates"],
+            state["reranked_candidates"],
         )
         if not selected:
             raise ServiceError(
@@ -214,5 +261,6 @@ class BaselineChatExecutor:
             "result": ChatExecutionResult(
                 response=response,
                 evidence_ids=frozenset(evidence_key(item) for item in selected),
+                retrieved_candidates=tuple(state.get("candidates", [])),
             )
         }

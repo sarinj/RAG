@@ -203,6 +203,27 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "EvaluationChatResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ChatResponse"
+          },
+          "retrievalCandidates": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Retrievalcandidates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "response",
+          "retrievalCandidates"
+        ],
+        "title": "EvaluationChatResponse",
+        "type": "object"
+      },
       "HealthResponse": {
         "additionalProperties": false,
         "properties": {
@@ -243,6 +264,33 @@
           "content"
         ],
         "title": "HistoryMessage",
+        "type": "object"
+      },
+      "RetrievedCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "chunkId": {
+            "format": "uuid",
+            "title": "Chunkid",
+            "type": "string"
+          },
+          "sourceEnd": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sourceend",
+            "type": "integer"
+          },
+          "sourceStart": {
+            "minimum": 0.0,
+            "title": "Sourcestart",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunkId",
+          "sourceStart",
+          "sourceEnd"
+        ],
+        "title": "RetrievedCandidate",
         "type": "object"
       },
       "SourceGeneration": {
@@ -434,6 +482,112 @@
           }
         ],
         "summary": "Answer a question over a server-resolved source snapshot",
+        "tags": [
+          "internal chat"
+        ]
+      }
+    },
+    "/internal/evaluation/chat": {
+      "post": {
+        "operationId": "evaluation_chat_internal_evaluation_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request or retrieval mode"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid internal token"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Source snapshot changed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Citation is outside retrieved evidence"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Executor response violated the internal contract"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service or model is unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Generation deadline exceeded"
+          }
+        },
+        "security": [
+          {
+            "InternalBearer": []
+          }
+        ],
+        "summary": "Run internal chat and include vector candidates for evaluation",
         "tags": [
           "internal chat"
         ]

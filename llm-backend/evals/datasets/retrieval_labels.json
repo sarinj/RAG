@@ -1,0 +1,57 @@
+{
+  "version": "1",
+  "datasets": {
+    "astrarail": {
+      "1": ["The project began in January 2026 and is led by Elena Novak."],
+      "2": ["The first production rollout is planned for December 2026."],
+      "3": ["Project Horizon is designed to update seat availability within 2 seconds."],
+      "4": ["Standard tickets may be changed up to 24 hours before departure for a fee of 15 Norland Dollars."],
+      "5": ["For delays between 60 and 119 minutes, passengers receive 25% of the ticket price."],
+      "6": ["Passengers must submit compensation requests within 30 days of the journey."],
+      "7": ["Executive passengers may bring up to 40 kilograms of checked baggage."],
+      "8": ["Bicycles are allowed only on regional trains and require a bicycle reservation."],
+      "9": ["If a critical brake sensor reports a fault, the train must be removed from passenger service until an engineer clears it."],
+      "10": ["If an item is found, AstraRail stores it for 90 days before it may be donated or disposed of."]
+    },
+    "helios_city": {
+      "1": ["As of August 2026, the Chief Digital Operations Officer is Dr. Mira Voss."],
+      "2": [
+        "DC-CENTRAL is the oldest facility and was opened in 2014.",
+        "DC-NORTH opened in 2019.",
+        "DC-EAST opened in 2023."
+      ],
+      "3": ["PostgreSQL is the default relational database for new internal systems unless a project has a documented reason to use another database."],
+      "4": ["For Tier 1 systems, the standard Recovery Time Objective is 30 minutes and the standard Recovery Point Objective is 5 minutes."],
+      "5": ["Vehicle positions are normally updated every 5 seconds for metro and tram vehicles."],
+      "6": ["The default adult metro fare is 2.80 Helios Credits."],
+      "7": ["Project Orbit is led by Hannah Ito."],
+      "8": ["Full transit-wide migration is planned to complete by June 2027."],
+      "9": ["Municipal buildings represent approximately 41%."],
+      "10": ["Project Solaris is HCA's municipal energy optimization program.", "It is led by Rafael Mendes."],
+      "51": [
+        "The preferred approach for database-backed services is the transactional outbox pattern.",
+        "Redis notifications may be used as a wake-up optimization.",
+        "Redis must not be treated as the sole source of truth for guaranteed event delivery."
+      ],
+      "52": ["BM25 is useful for exact terms, identifiers, policy codes, unusual names, and specific error messages."],
+      "53": [
+        "The reranker is slower than embedding similarity but more accurate for many relevance judgments.",
+        "Therefore it is applied to a smaller candidate set rather than the entire corpus."
+      ],
+      "71": [
+        "Project Lantern is HCA's internal generative-AI assistant program.",
+        "The system uses retrieval-augmented generation.",
+        "The first version uses hybrid retrieval combining dense embeddings and BM25 keyword search."
+      ],
+      "73": [
+        "Project RiverGuard improves flood prediction.",
+        "In 2025 testing, RiverGuard improved warning lead time by an average of 22 minutes compared with the previous rules-based method."
+      ],
+      "80": [
+        "Bridgepoint is the modernization project for the North Harbor Bridge control systems.",
+        "The target completion date is February 2027.",
+        "The project budget is 86 million Helios Credits."
+      ]
+    }
+  }
+}

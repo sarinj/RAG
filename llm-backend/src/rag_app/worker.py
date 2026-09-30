@@ -7,6 +7,7 @@ import logging
 import signal
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from tokenizers import Tokenizer
@@ -18,6 +19,12 @@ from rag_app.errors import (
     ProviderError,
 )
 from rag_app.ingestion.chunking import CHUNKER_VERSION, IngestionChunk, chunk_document
+from rag_app.ingestion.contextualization import (
+    CONTEXT_PROMPT_VERSION,
+    ContextualizationLimitError,
+    ContextualizationOutputError,
+    contextualize_chunk,
+)
 from rag_app.ingestion.errors import IngestionFailure, LeaseLost, RetryableIngestionFailure
 from rag_app.ingestion.parsing import parse_file, resolve_storage_path
 from rag_app.providers.factory import create_provider
@@ -39,6 +46,13 @@ logger = logging.getLogger("rag_app.worker")
 EMBEDDING_BATCH_SIZE = 1
 OPENAI_EMBEDDING_BATCH_SIZE = 32
 HEARTBEAT_SECONDS = 20
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedChunk:
+    chunk: IngestionChunk
+    context_text: str | None
+    searchable_text: str
 
 
 def _emit(event: str, **fields: object) -> None:
@@ -177,10 +191,10 @@ class IngestionWorker:
     async def _process(self, claim: JobClaim) -> None:
         try:
             job = await self._repository.begin(claim)
-            if job.mode != "baseline":
+            if job.mode not in {"baseline", "contextual"}:
                 raise IngestionFailure(
                     "UNSUPPORTED_INDEX_MODE",
-                    "This worker currently supports baseline indexing only.",
+                    "This worker cannot process the configured index mode.",
                 )
             target_tokens = _required_int(job.config, "chunkTargetTokens")
             overlap_tokens = _required_int(job.config, "chunkOverlapTokens", minimum=0)
@@ -210,6 +224,8 @@ class IngestionWorker:
                     "EMBEDDING_CONFIG_MISMATCH",
                     "The generation uses a different embedding configuration.",
                 )
+            if job.mode == "contextual":
+                self._validate_contextual_config(job)
             await self._ingest(job, target_tokens, overlap_tokens)
             _emit("job_published", jobId=claim.job_id, generationId=claim.generation_id)
         except asyncio.CancelledError:
@@ -252,6 +268,47 @@ class IngestionWorker:
         if not chunks:
             raise IngestionFailure("EMPTY_DOCUMENT", "The document does not contain any text.")
         await self._repository.check_capacity(job.claim, len(chunks))
+
+        prepared_chunks: list[PreparedChunk] = []
+        if job.mode == "contextual":
+            await self._repository.set_stage(
+                job.claim, "contextualizing", total_chunks=len(chunks)
+            )
+            context_window_tokens = _required_int(job.config, "contextWindowTokens")
+            max_output_tokens = _required_int(job.config, "maxOutputTokens")
+            for chunk in chunks:
+                try:
+                    context_text = await contextualize_chunk(
+                        self._provider,
+                        self._tokenizer,
+                        document_text=document.text,
+                        chunk=chunk,
+                        context_window_tokens=context_window_tokens,
+                        max_output_tokens=max_output_tokens,
+                    )
+                except ContextualizationLimitError as exc:
+                    raise IngestionFailure(
+                        "CONTEXT_LIMIT_EXCEEDED",
+                        "The document exceeds the configured model context limit.",
+                    ) from exc
+                except ContextualizationOutputError as exc:
+                    raise RetryableIngestionFailure(
+                        "CONTEXTUALIZATION_FAILED",
+                        "The document could not be contextualized.",
+                    ) from exc
+                prepared_chunks.append(
+                    PreparedChunk(
+                        chunk=chunk,
+                        context_text=context_text,
+                        searchable_text=f"{context_text}\n\n{chunk.original_text}",
+                    )
+                )
+        else:
+            prepared_chunks = [
+                PreparedChunk(chunk=chunk, context_text=None, searchable_text=chunk.original_text)
+                for chunk in chunks
+            ]
+
         await self._repository.set_stage(job.claim, "embedding", total_chunks=len(chunks))
 
         batch_size = (
@@ -259,20 +316,25 @@ class IngestionWorker:
             if self._settings.active_embedding_provider == "openai"
             else EMBEDDING_BATCH_SIZE
         )
-        for offset in range(0, len(chunks), batch_size):
-            batch = chunks[offset : offset + batch_size]
+        for offset in range(0, len(prepared_chunks), batch_size):
+            batch = prepared_chunks[offset : offset + batch_size]
             embeddings = await self._embed_batch(job, batch)
             await self._repository.stage_batch(
                 job.claim,
                 [
-                    StagedChunk(chunk=chunk, embedding=vector)
-                    for chunk, vector in zip(batch, embeddings, strict=True)
+                    StagedChunk(
+                        chunk=item.chunk,
+                        context_text=item.context_text,
+                        searchable_text=item.searchable_text,
+                        embedding=vector,
+                    )
+                    for item, vector in zip(batch, embeddings, strict=True)
                 ],
             )
             _emit(
                 "job_progress",
                 jobId=job.claim.job_id,
-                processedChunks=min(offset + len(batch), len(chunks)),
+                processedChunks=min(offset + len(batch), len(prepared_chunks)),
                 totalChunks=len(chunks),
             )
         await self._repository.set_stage(job.claim, "publishing")
@@ -281,10 +343,10 @@ class IngestionWorker:
     async def _embed_batch(
         self,
         job: WorkerJob,
-        chunks: list[IngestionChunk],
+        chunks: list[PreparedChunk],
     ) -> list[list[float]]:
         response = await self._provider.embed(
-            EmbeddingInput(texts=[chunk.original_text for chunk in chunks])
+            EmbeddingInput(texts=[chunk.searchable_text for chunk in chunks])
         )
         if (
             response.dimension != job.embedding_dimension
@@ -295,6 +357,36 @@ class IngestionWorker:
                 "EMBEDDING_RESPONSE_INVALID", "The embedding service returned an invalid response."
             )
         return response.vectors
+
+    def _validate_contextual_config(self, job: WorkerJob) -> None:
+        prompt_version = _required_string(job.config, "contextPromptVersion")
+        context_model = _required_string(job.config, "contextModel")
+        context_digest = _required_string(job.config, "contextModelDigest")
+        if prompt_version != CONTEXT_PROMPT_VERSION:
+            raise IngestionFailure(
+                "UNSUPPORTED_CONTEXT_PROMPT",
+                "This worker cannot process the configured context prompt version.",
+            )
+        if (
+            prompt_version != self._config.context_prompt_version
+            or context_model != self._config.context_model
+            or context_digest.lower() != (self._config.context_model_digest or "").lower()
+        ):
+            raise IngestionFailure(
+                "CONTEXT_CONFIG_MISMATCH",
+                "The generation uses a different contextualization configuration.",
+            )
+        if context_model != self._settings.generation_model:
+            raise IngestionFailure(
+                "CONTEXT_MODEL_MISMATCH",
+                "The configured contextualization model is unavailable.",
+            )
+        context_window = _required_int(job.config, "contextWindowTokens")
+        if context_window != self._config.context_window_tokens:
+            raise IngestionFailure(
+                "CONTEXT_CONFIG_MISMATCH",
+                "The generation uses a different contextualization context window.",
+            )
 
     async def _record_failure(
         self,

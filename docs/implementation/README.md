@@ -17,7 +17,7 @@ The lead owns shared contracts, root infrastructure, fixtures, pnpm lockfile, an
 3. Bootstrap all services in parallel; lead installs TS dependencies serially and wires Compose. Producers publish OpenAPI; consumers generate types. Each producer owns its OpenAPI export.
 4. Implement upload concurrently: FE-02, BE-02, LLM-02. Integrate real upload → ready before baseline chat acceptance.
 5. Implement baseline chat concurrently: FE-03/04, BE-03/04, LLM-03. Capture a real end-to-end baseline.
-6. Add contextualization/reindexing, then BM25/RRF; compare quality before enabling hybrid defaults.
+6. Run the configured contextualization, BM25/RRF, and reranking stages; compare vector and hybrid quality with the labeled evaluation set.
 7. Fresh read-only tester/reviewer sessions check the integrated state. Lead assigns fixes to the owning builder.
 
 Model-dependent work waits for the model configuration. UI and API scaffolding can proceed using reviewed fixtures. No agent may claim a completed integration using mocks alone.

@@ -15,7 +15,15 @@ from rag_app.errors import (
     ProviderTimeout,
     ServiceError,
 )
-from rag_app.models import CONTRACT_VERSION, ChatRequest, ChatResponse, ErrorEnvelope
+from rag_app.models import (
+    CONTRACT_VERSION,
+    ChatRequest,
+    ChatResponse,
+    ErrorEnvelope,
+    EvaluationChatResponse,
+    EvidenceRecord,
+    RetrievedCandidate,
+)
 from rag_app.repositories.documents import DocumentRepository
 
 router = APIRouter(tags=["internal chat"])
@@ -29,6 +37,7 @@ class ChatExecutor(Protocol):
 class ChatExecutionResult:
     response: ChatResponse
     evidence_ids: frozenset[tuple[UUID, UUID, UUID]]
+    retrieved_candidates: tuple[EvidenceRecord, ...] = ()
 
 
 @router.post(
@@ -53,6 +62,44 @@ async def chat(
     request: Request,
     _principal: None = Depends(require_internal_token),
 ) -> ChatResponse:
+    result = await _execute_chat(payload, request)
+    return result.response
+
+
+@router.post(
+    "/internal/evaluation/chat",
+    response_model=EvaluationChatResponse,
+    responses={
+        400: {"model": ErrorEnvelope, "description": "Invalid request or retrieval mode"},
+        401: {"model": ErrorEnvelope, "description": "Missing or invalid internal token"},
+        409: {"model": ErrorEnvelope, "description": "Source snapshot changed"},
+        422: {"model": ErrorEnvelope, "description": "Citation is outside retrieved evidence"},
+        502: {"model": ErrorEnvelope, "description": "Executor response violated the internal contract"},
+        503: {"model": ErrorEnvelope, "description": "Service or model is unavailable"},
+        504: {"model": ErrorEnvelope, "description": "Generation deadline exceeded"},
+    },
+    summary="Run internal chat and include retrieved candidates for evaluation",
+)
+async def evaluation_chat(
+    payload: ChatRequest,
+    request: Request,
+    _principal: None = Depends(require_internal_token),
+) -> EvaluationChatResponse:
+    result = await _execute_chat(payload, request)
+    return EvaluationChatResponse(
+        response=result.response,
+        retrieval_candidates=[
+            RetrievedCandidate(
+                chunk_id=evidence.chunk.id,
+                source_start=evidence.chunk.source_start,
+                source_end=evidence.chunk.source_end,
+            )
+            for evidence in result.retrieved_candidates
+        ],
+    )
+
+
+async def _execute_chat(payload: ChatRequest, request: Request) -> ChatExecutionResult:
     if payload.contract_version != CONTRACT_VERSION:
         raise ServiceError(
             400,
@@ -99,4 +146,4 @@ async def chat(
             "INVALID_CITATIONS",
             "Answer citations do not match retrieved evidence",
         )
-    return response
+    return result

@@ -4,9 +4,9 @@ FastAPI owns the internal chat contract, model-provider adapters, and the ingest
 
 ## Current implementation slice
 
-The service provides the internal FastAPI contract, model-provider adapters, a durable baseline ingestion worker, and vector retrieval with cited answer generation. Chat and ingestion depend on one `LLMProvider` port. The factory composes a generation adapter and an embedding adapter behind that port, so provider-specific HTTP formats stay outside the RAG workflow. The worker claims queued or expired jobs with leases, parses PDF/TXT/Markdown, chunks with the pinned tokenizer, embeds and stages chunks, then publishes the generation and active pointer in one transaction. It is enabled by default in the root Compose stack.
+The service provides the internal FastAPI contract, model-provider adapters, a durable ingestion worker, contextual indexing, hybrid retrieval, and cited answer generation. Chat and ingestion depend on one `LLMProvider` port. The factory composes a generation adapter and an embedding adapter behind that port, so provider-specific HTTP formats stay outside the RAG workflow. The worker claims queued or expired jobs with leases, parses PDF/TXT/Markdown, chunks with the pinned tokenizer, optionally contextualizes each chunk against the full document, embeds and stages searchable text, then publishes the generation and active pointer in one transaction. It is enabled by default in the root Compose stack.
 
-Chat uses a LangGraph state graph to orchestrate source/config validation, scoped vector retrieval, evidence selection, answer generation, citation validation, and one bounded repair path. Provider HTTP calls, PostgreSQL/pgvector retrieval, and durable application data stay behind adapters and repositories; the per-request graph does not duplicate application persistence. Contextual indexing and hybrid BM25 retrieval are not implemented; contextual jobs are failed with a sanitized unsupported-mode error rather than being indexed as baseline by mistake.
+Chat uses a LangGraph state graph to orchestrate source/config validation, history-aware query rewriting, scoped vector or hybrid BM25 plus vector retrieval, reciprocal-rank fusion, LLM reranking, evidence selection, answer generation, citation validation, and one bounded repair path. Hybrid retrieval and query rewriting/reranking are the default conversation path. Hybrid search fetches up to 30 vector matches and 30 lexical matches from the same active source snapshot, fuses them, and reranks the best 30. The prompt receives up to five reranked chunks under the model token budget. Provider HTTP calls, PostgreSQL/pgvector retrieval, and durable application data stay behind adapters and repositories; the per-request graph does not duplicate application persistence.
 
 ## Setup
 
@@ -53,7 +53,7 @@ shasum -a 256 backend/config/tokenizer.json
 
 Set `tokenizerVersion` in the shared index config to `sha256:` followed by that digest. The worker checks it at startup and checks the recorded version for every generation. Compose mounts `backend/config/tokenizer.json` read-only at `/config/tokenizer.json`.
 
-The Python bootstrap currently reads this flat JSON shape. It uses the shared generation config key names verbatim; the lead and NestJS owner must use the same artifact shape before integration:
+The Python bootstrap reads this flat JSON shape. For baseline indexing, leave the three context fields null. To enable full-document contextual indexing, set `INDEX_MODE=contextual` and provide `contextPromptVersion: "full-document-chunk-context-v1"`, the exact `contextModel` selected in `GENERATION_MODEL`, and an operator-pinned 64-character `contextModelDigest`. The worker rejects mismatched models/configuration and documents that exceed the complete-document context budget; it does not silently truncate the document. Reindex existing documents after changing the indexing mode or context settings.
 
 ```json
 {
@@ -68,7 +68,8 @@ The Python bootstrap currently reads this flat JSON shape. It uses the shared ge
   "contextModel": null,
   "contextModelDigest": null,
   "contextWindowTokens": 8192,
-  "maxOutputTokens": 512
+  "maxOutputTokens": 512,
+  "retrievalMode": "hybrid"
 }
 ```
 
@@ -92,7 +93,7 @@ uv run rag-worker
 
 ## RAG evaluation
 
-`rag-eval` reads the bundled AstraRail and Helios City suites. It separates each question-and-answer section from the source corpus before ingestion, uploads a temporary evaluation document through the local backend, calls the internal chat endpoint for each case, and requests deletion of the temporary document when finished. AstraRail's expected answers are kept in `evals/datasets/astrarail_answers.json`; Helios answers are parsed from its answer-key section. Existing source documents are left untouched.
+`rag-eval` reads the bundled AstraRail and Helios City suites. It separates each question-and-answer section from the source corpus before ingestion, finds reusable documents by their stored SHA-256, and verifies a selected document's content hash before scoring. It uploads a temporary evaluation document through the local backend when needed, calls the authenticated internal evaluation chat endpoint for each case, and requests deletion only for documents created by that run (unless `--keep-documents` is set). AstraRail's expected answers are kept in `evals/datasets/astrarail_answers.json`; Helios answers are parsed from its answer-key section. Existing or explicitly selected documents are left untouched.
 
 Run from the repository root after the Compose stack is ready:
 
@@ -104,7 +105,7 @@ docker compose run --rm --no-deps \
   llm-backend uv run --no-sync rag-eval --dataset all
 ```
 
-The runner writes JSON and Markdown reports under `llm-backend/evals/reports/`. Use `--dataset astrarail` or `--dataset helios_city` to run one suite, `--limit 3` for a short run, and `--keep-documents` to retain the temporary indexed corpus. It reports answer token F1, unanswerable abstention accuracy, citation presence, and latency with selected provider/model IDs, index config, and dataset hashes. The supplied suites do not label supporting source spans, so the report cannot claim retrieval recall or factual grounding; review answers and citations before drawing quality conclusions.
+The runner writes JSON and Markdown reports under `llm-backend/evals/reports/`. Use `--dataset astrarail` or `--dataset helios_city` to run one suite, `--limit 3` for a short run, and `--keep-documents` to retain a corpus uploaded during that run. It reports answer token F1, unanswerable abstention accuracy, citation presence, latency, and vector-retrieval Hit@5/10 and Recall@5/10 for 26 manually labeled cases, with selected provider/model IDs, index config, and dataset hashes. Retrieval scores measure whether returned chunks overlap labeled source spans; they do not establish factual grounding. Review answers and citations before drawing quality conclusions.
 
 To evaluate an already-indexed document instead of uploading a temporary corpus, pass `--source astrarail=<document-uuid>` or `--source helios_city=<document-uuid>`.
 
@@ -116,7 +117,7 @@ Psycopg uses an async connection pool and registers pgvector for each connection
 
 `GET /health/live` is process liveness. `GET /health/ready` checks PostgreSQL schema, the reviewed config, selected provider model availability, the embedding fingerprint, and live vector dimension. Both are internal-network endpoints.
 
-`POST /internal/chat` requires `Authorization: Bearer <INTERNAL_API_TOKEN>` and accepts/returns contract version `1.0.0`. The implementation validates request structure, history pairing, unique source documents, active generation scope, citation labels, and response markers.
+`POST /internal/chat` requires `Authorization: Bearer <INTERNAL_API_TOKEN>` and accepts/returns contract version `1.0.0`. The implementation validates request structure, history pairing, unique source documents, active generation scope, citation labels, and response markers. `rag-eval` uses the equally authenticated `POST /internal/evaluation/chat`, which runs the same chat graph and additionally returns candidate chunk IDs and source offsets for labeled retrieval scoring.
 
 OpenAPI is exported to `openapi.json` from the FastAPI app. No schema migrations or conversation persistence belong in this service.
 
@@ -128,4 +129,4 @@ OpenAPI is exported to `openapi.json` from the FastAPI app. No schema migrations
 - Worker leases last 90 seconds and are renewed every 20 seconds. Expired jobs are retried up to three automatic attempts; a document-level failure leaves an existing active generation in place.
 - Upload storage is mounted read-only in the worker. Every write verifies the lease and deletion state; chunk batches reserve the shared 5,000-row capacity before insertion.
 - The selected tokenizer must be pinned in `tokenizerVersion`; Ollama's REST API does not expose token counting.
-- Contextualization and BM25/hybrid retrieval remain later LLM-04 through LLM-05 work. Use `rag-eval` to record the vector baseline before comparing retrieval changes.
+- Contextual indexing requires a configured prompt version, model ID, model digest, and `INDEX_MODE=contextual`; baseline mode continues to embed original chunk text. Set `retrievalMode` to `vector` in the shared index configuration only when intentionally comparing the vector baseline. The default is scoped BM25 plus vector search, fusion, and reranking.
