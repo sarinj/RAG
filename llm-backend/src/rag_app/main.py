@@ -16,7 +16,8 @@ from rag_app.api.health import ReadinessChecker
 from rag_app.api.router import router
 from rag_app.config import Settings, load_index_configuration
 from rag_app.generation.chat import BaselineChatExecutor
-from rag_app.providers.ollama import OllamaProvider
+from rag_app.providers.factory import create_provider
+from rag_app.providers.protocols import ProviderAdapter
 from rag_app.repositories.database import Database
 from rag_app.tokenization import load_tokenizer
 
@@ -34,7 +35,7 @@ def create_app(
     settings: Settings | None = None,
     *,
     database: Database | None = None,
-    provider: OllamaProvider | None = None,
+    provider: ProviderAdapter | None = None,
     chat_executor: object | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings()
@@ -44,15 +45,11 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         owns_provider = app.state.provider is None
         if owns_provider:
-            app.state.provider = OllamaProvider(active_settings)
+            app.state.provider = create_provider(active_settings)
         try:
             if app.state.chat_executor is None:
                 try:
                     config = load_index_configuration(active_settings.index_config_path)
-                    if not active_settings.generation_model:
-                        raise ValueError("GENERATION_MODEL is not configured")
-                    if active_settings.embedding_model != config.embedding_model:
-                        raise ValueError("EMBEDDING_MODEL does not match the shared index config")
                     if app.state.provider is None:
                         raise ValueError("The language model provider is unavailable")
                     tokenizer = load_tokenizer(

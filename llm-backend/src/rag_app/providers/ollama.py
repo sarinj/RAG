@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import asyncio
-import math
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
-from rag_app.config import Settings
+from rag_app.config import IndexConfiguration, ProviderConnection, Settings
 from rag_app.errors import (
     ProviderError,
     ProviderModelMissing,
     ProviderProtocolError,
     ProviderTimeout,
+)
+from rag_app.providers.models import (
+    EmbeddingInput,
+    EmbeddingOutput,
+    GenerationInput,
+    GenerationOutput,
 )
 
 
@@ -42,81 +47,72 @@ class OllamaShowResponse(BaseModel):
     model_info: dict[str, Any] = Field(default_factory=dict)
 
 
-class GenerationInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    prompt: StrictStr = Field(min_length=1)
-    context_window_tokens: StrictInt | None = Field(default=None, gt=0)
-    max_output_tokens: StrictInt = Field(default=512, gt=0)
-    temperature: float | None = Field(default=None, ge=0, le=2)
-    think: StrictBool | None = None
-    response_format: Literal["json"] | None = None
-
-
-class GenerationOutput(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    model: str
-    response: str
-    done: bool
-    done_reason: str | None = None
-    total_duration: int | None = None
-    load_duration: int | None = None
-    prompt_eval_count: int | None = None
-    prompt_eval_duration: int | None = None
-    eval_count: int | None = None
-    eval_duration: int | None = None
-
-
-class EmbeddingInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    texts: list[StrictStr] = Field(min_length=1, max_length=128)
-
-    @model_validator(mode="after")
-    def validate_texts(self) -> EmbeddingInput:
-        if any(not text.strip() for text in self.texts):
-            raise ValueError("embedding texts cannot be empty")
-        return self
-
-
-class EmbeddingOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    model: str
-    vectors: list[list[float]] = Field(min_length=1)
-    dimension: int = Field(gt=0)
-
-    @model_validator(mode="after")
-    def validate_vectors(self) -> EmbeddingOutput:
-        if any(len(vector) != self.dimension for vector in self.vectors):
-            raise ValueError("embedding vectors have inconsistent dimensions")
-        if any(not math.isfinite(value) for vector in self.vectors for value in vector):
-            raise ValueError("embedding vectors must contain finite values")
-        return self
-
-
 class OllamaProvider:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        connection: ProviderConnection | None = None,
+    ) -> None:
         self._settings = settings
+        active_connection = connection or settings.generation_connection
         self._client = httpx.AsyncClient(
-            base_url=settings.ollama_base_url,
+            base_url=active_connection.base_url,
             timeout=httpx.Timeout(
-                connect=settings.ollama_connect_timeout_seconds,
-                read=settings.ollama_read_timeout_seconds,
-                write=settings.ollama_write_timeout_seconds,
-                pool=settings.ollama_pool_timeout_seconds,
+                connect=settings.provider_connect_timeout_seconds,
+                read=settings.provider_read_timeout_seconds,
+                write=settings.provider_write_timeout_seconds,
+                pool=settings.provider_pool_timeout_seconds,
             ),
             limits=httpx.Limits(
                 max_connections=(
-                    settings.ollama_generation_concurrency + settings.ollama_embedding_concurrency
+                    settings.provider_generation_concurrency
+                    + settings.provider_embedding_concurrency
                 ),
-                max_keepalive_connections=settings.ollama_generation_concurrency
-                + settings.ollama_embedding_concurrency,
+                max_keepalive_connections=(
+                    settings.provider_generation_concurrency
+                    + settings.provider_embedding_concurrency
+                ),
             ),
         )
-        self._generation_gate = asyncio.Semaphore(settings.ollama_generation_concurrency)
-        self._embedding_gate = asyncio.Semaphore(settings.ollama_embedding_concurrency)
+        self._generation_gate = asyncio.Semaphore(settings.provider_generation_concurrency)
+        self._embedding_gate = asyncio.Semaphore(settings.provider_embedding_concurrency)
+
+    async def check_readiness(
+        self,
+        config: IndexConfiguration,
+        *,
+        require_generation: bool = True,
+    ) -> None:
+        if require_generation:
+            await self.check_generation_readiness()
+        await self.check_embedding_readiness(config)
+
+    async def check_generation_readiness(self) -> None:
+        generation_name = self._settings.generation_model
+        if not generation_name:
+            raise ProviderModelMissing("Generation model is not configured")
+        model = find_model(await self.list_models(), generation_name)
+        if not model.digest:
+            raise ProviderProtocolError("Generation model digest is missing")
+
+    async def check_embedding_readiness(self, config: IndexConfiguration) -> None:
+        if not self._settings.embedding_model:
+            raise ProviderModelMissing("Embedding model is not configured")
+        if self._settings.embedding_model != config.embedding_model:
+            raise ProviderProtocolError("Embedding model differs from the reviewed index config")
+
+        models = await self.list_models()
+        embedding_model = find_model(models, config.embedding_model)
+        if embedding_model.digest.lower() != config.embedding_digest.lower():
+            raise ProviderProtocolError(
+                "Embedding model digest differs from the reviewed index config"
+            )
+
+        live_embedding = await self.embed(EmbeddingInput(texts=["readiness dimension probe"]))
+        if live_embedding.dimension != config.embedding_dimension:
+            raise ProviderProtocolError(
+                "Live embedding dimension differs from the reviewed index config"
+            )
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -144,10 +140,10 @@ class OllamaProvider:
         if request.temperature is not None:
             options["temperature"] = request.temperature
         timeout = httpx.Timeout(
-            connect=self._settings.ollama_connect_timeout_seconds,
+            connect=self._settings.provider_connect_timeout_seconds,
             read=self._settings.generation_timeout_seconds,
-            write=self._settings.ollama_write_timeout_seconds,
-            pool=self._settings.ollama_pool_timeout_seconds,
+            write=self._settings.provider_write_timeout_seconds,
+            pool=self._settings.provider_pool_timeout_seconds,
         )
         body: dict[str, Any] = {
             "model": self._settings.generation_model,
@@ -175,10 +171,10 @@ class OllamaProvider:
         if not self._settings.embedding_model:
             raise ProviderModelMissing("Embedding model is not configured")
         timeout = httpx.Timeout(
-            connect=self._settings.ollama_connect_timeout_seconds,
+            connect=self._settings.provider_connect_timeout_seconds,
             read=self._settings.embedding_timeout_seconds,
-            write=self._settings.ollama_write_timeout_seconds,
-            pool=self._settings.ollama_pool_timeout_seconds,
+            write=self._settings.provider_write_timeout_seconds,
+            pool=self._settings.provider_pool_timeout_seconds,
         )
         async with self._embedding_gate:
             payload = await self._request(

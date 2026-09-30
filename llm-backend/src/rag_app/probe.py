@@ -5,13 +5,12 @@ import asyncio
 import json
 import sys
 from collections.abc import Sequence
-from typing import Any
 
 from rag_app.config import Settings
 from rag_app.errors import ProviderError
+from rag_app.providers.factory import create_provider
+from rag_app.providers.models import EmbeddingInput, GenerationInput
 from rag_app.providers.ollama import (
-    EmbeddingInput,
-    GenerationInput,
     OllamaProvider,
     find_context_window,
     find_model,
@@ -24,46 +23,68 @@ async def probe(settings: Settings, samples: list[str]) -> dict[str, object]:
     if not settings.generation_model or not settings.embedding_model:
         raise ValueError("Set GENERATION_MODEL and EMBEDDING_MODEL before probing")
 
-    provider = OllamaProvider(settings)
+    provider = create_provider(settings)
     try:
-        models = await provider.list_models()
-        generation = find_model(models, settings.generation_model)
-        embedding = find_model(models, settings.embedding_model)
-        generation_info = await provider.show_model(settings.generation_model)
         embedded = await provider.embed(EmbeddingInput(texts=samples))
-        model_info: dict[str, Any] = generation_info.model_info
         generated = await provider.generate(
             GenerationInput(
                 prompt=(f"Reply with a short greeting in the language used here: {samples[0]}"),
                 max_output_tokens=32,
             )
         )
+        generation_digest: str | None = None
+        embedding_digest = settings.embedding_model_digest
+        context_window: int | None = None
+        generation_is_ollama = settings.llm_provider == "ollama"
+        embedding_is_ollama = settings.active_embedding_provider == "ollama"
+        if generation_is_ollama or embedding_is_ollama:
+            metadata_provider = OllamaProvider(
+                settings,
+                (
+                    settings.generation_connection
+                    if generation_is_ollama
+                    else settings.embedding_connection
+                ),
+            )
+            try:
+                models = await metadata_provider.list_models()
+                if generation_is_ollama:
+                    generation_model = find_model(models, settings.generation_model)
+                    generation_info = await metadata_provider.show_model(settings.generation_model)
+                    context_window = find_context_window(generation_info.model_info)
+                    generation_digest = generation_model.digest
+                if embedding_is_ollama:
+                    embedding_model = find_model(models, settings.embedding_model)
+                    embedding_digest = embedding_model.digest
+            finally:
+                await metadata_provider.close()
         return {
             "probeStatus": "ready_for_review",
+            "provider": settings.llm_provider,
+            "embeddingProvider": settings.active_embedding_provider,
             "generationModel": {
-                "name": generation.name,
-                "digest": generation.digest,
-                "contextWindowTokens": find_context_window(model_info),
+                "name": settings.generation_model,
+                "digest": generation_digest,
+                "contextWindowTokens": context_window,
                 "sampleOutput": generated.response,
                 "promptTokens": generated.prompt_eval_count,
                 "outputTokens": generated.eval_count,
                 "durationNanoseconds": generated.total_duration,
             },
             "embeddingModel": {
-                "name": embedding.name,
-                "digest": embedding.digest,
+                "name": settings.embedding_model,
+                "digest": embedding_digest,
                 "dimension": embedded.dimension,
                 "sampleCount": len(embedded.vectors),
             },
             "tokenizer": {
                 "status": "not-probed",
                 "note": (
-                    "Ollama exposes model context metadata, not the selected tokenizer's "
-                    "local token-count API."
+                    "The provider does not expose the selected tokenizer's local token-count API."
                 ),
             },
             "inputBudget": {
-                "reportedContextWindowTokens": find_context_window(model_info),
+                "reportedContextWindowTokens": context_window,
                 "exactPromptTokenCount": generated.prompt_eval_count,
                 "status": "requires-selected-tokenizer",
             },
@@ -71,7 +92,8 @@ async def probe(settings: Settings, samples: list[str]) -> dict[str, object]:
                 "status": "requires-review",
                 "note": (
                     "Use these model identifiers and embedding dimension in the reviewed "
-                    "shared index config."
+                    "shared index config. For hosted embeddings, set EMBEDDING_MODEL_DIGEST "
+                    "to the operator-pinned embedding model fingerprint."
                 ),
             },
         }
@@ -80,7 +102,7 @@ async def probe(settings: Settings, samples: list[str]) -> dict[str, object]:
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Probe configured local Ollama models")
+    parser = argparse.ArgumentParser(description="Probe configured generation and embedding models")
     parser.add_argument(
         "--sample-text",
         action="append",

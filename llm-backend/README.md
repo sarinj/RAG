@@ -1,16 +1,35 @@
 # LLM backend
 
-FastAPI owns the internal chat contract, Ollama model access, and the ingestion worker. It reads the NestJS-owned PostgreSQL schema and never creates migrations.
+FastAPI owns the internal chat contract, model-provider adapters, and the ingestion worker. It reads the NestJS-owned PostgreSQL schema and never creates migrations.
 
 ## Current implementation slice
 
-The service provides the internal FastAPI contract, model readiness checks, Ollama adapters, a durable baseline ingestion worker, and vector retrieval with cited answer generation. The worker claims queued or expired jobs with leases, parses PDF/TXT/Markdown, chunks with the pinned tokenizer, embeds and stages chunks, then publishes the generation and active pointer in one transaction. It is enabled by default in the root Compose stack.
+The service provides the internal FastAPI contract, model-provider adapters, a durable baseline ingestion worker, and vector retrieval with cited answer generation. Chat and ingestion depend on one `LLMProvider` port. The factory composes a generation adapter and an embedding adapter behind that port, so provider-specific HTTP formats stay outside the RAG workflow. The worker claims queued or expired jobs with leases, parses PDF/TXT/Markdown, chunks with the pinned tokenizer, embeds and stages chunks, then publishes the generation and active pointer in one transaction. It is enabled by default in the root Compose stack.
 
-Chat uses a LangGraph state graph to orchestrate source/config validation, scoped vector retrieval, evidence selection, answer generation, citation validation, and one bounded repair path. Ollama calls, PostgreSQL/pgvector retrieval, and durable application data remain in the existing provider and repository layers; the per-request graph does not duplicate application persistence. Contextual indexing and hybrid BM25 retrieval are not implemented; contextual jobs are failed with a sanitized unsupported-mode error rather than being indexed as baseline by mistake.
+Chat uses a LangGraph state graph to orchestrate source/config validation, scoped vector retrieval, evidence selection, answer generation, citation validation, and one bounded repair path. Provider HTTP calls, PostgreSQL/pgvector retrieval, and durable application data stay behind adapters and repositories; the per-request graph does not duplicate application persistence. Contextual indexing and hybrid BM25 retrieval are not implemented; contextual jobs are failed with a sanitized unsupported-mode error rather than being indexed as baseline by mistake.
 
 ## Setup
 
-Install [uv](https://docs.astral.sh/uv/), copy `.env.example` to `.env`, then set `DATABASE_URL`, `INTERNAL_API_TOKEN`, `OLLAMA_BASE_URL`, `GENERATION_MODEL`, `EMBEDDING_MODEL`, `INDEX_CONFIG_PATH`, `TOKENIZER_PATH`, and `UPLOAD_DIR`. The index configuration must be the reviewed artifact shared with NestJS; do not create independent Python defaults.
+Install [uv](https://docs.astral.sh/uv/), copy `.env.example` to `.env`, then set `DATABASE_URL`, `INTERNAL_API_TOKEN`, `LLM_PROVIDER`, `GENERATION_MODEL`, `EMBEDDING_MODEL`, `INDEX_CONFIG_PATH`, `TOKENIZER_PATH`, and `UPLOAD_DIR`. Supported generation providers are `ollama`, `openai`, `claude`, `gemini`, and `huggingface`. Embeddings can use `ollama`, `openai`, `gemini`, or `huggingface`. By default, the embedding provider follows `LLM_PROVIDER`; Claude defaults to Ollama because Anthropic does not offer an embedding model. Set `EMBEDDING_PROVIDER` to choose another embedding backend. The index configuration must be the reviewed artifact shared with NestJS; do not create independent Python defaults.
+
+To switch the provider, change runtime configuration only:
+
+```dotenv
+LLM_PROVIDER=openai
+LLM_PROVIDER_BASE_URL=https://api.openai.com/v1
+LLM_PROVIDER_API_KEY=<provider-key>
+GENERATION_MODEL=<chat-model-id>
+EMBEDDING_MODEL=<embedding-model-id>
+EMBEDDING_MODEL_DIGEST=<64-character-pinned-fingerprint>
+```
+
+`openai` uses OpenAI's API by default. It also works with a local server that implements the OpenAI chat-completions, embeddings, and models endpoints; set `LLM_PROVIDER_BASE_URL` to that server's reachable `/v1` endpoint and leave the key blank if it does not require authentication.
+
+For Claude, set `LLM_PROVIDER=claude`, provide an Anthropic API key, and use a Claude model ID. Since Claude supplies generation only, embeddings default to Ollama. For example, set `EMBEDDING_PROVIDER=gemini` plus `EMBEDDING_PROVIDER_API_KEY` to use Gemini embeddings with Claude generation.
+
+For Gemini, set `LLM_PROVIDER=gemini`, provide a Gemini API key, and set `GENERATION_MODEL` and `EMBEDDING_MODEL` to supported models. For Hugging Face Inference Providers, set `LLM_PROVIDER=huggingface`, use an access token with Inference Providers permission, and configure model IDs for chat and feature extraction. `LLM_PROVIDER_BASE_URL` defaults to `https://router.huggingface.co`.
+
+When `EMBEDDING_PROVIDER` matches `LLM_PROVIDER`, the generation API key and base URL are reused unless the embedding-specific values are set. When they differ, use `EMBEDDING_PROVIDER_BASE_URL` and `EMBEDDING_PROVIDER_API_KEY` to configure the embedding connection separately. Hosted embedding adapters cannot report a stable weight digest, so `EMBEDDING_MODEL_DIGEST` must be an operator-pinned fingerprint that matches `embeddingDigest` in the shared index config. Keep the selected embedding model, fingerprint, and dimension aligned with the existing index.
 
 The tokenizer is a versioned runtime input. For the configured Qwen3 embedding model, fetch the tokenizer JSON from the [Qwen3-Embedding-0.6B model repository](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B):
 
@@ -41,7 +60,7 @@ The Python bootstrap currently reads this flat JSON shape. It uses the shared ge
 }
 ```
 
-Embedding model, digest, and dimension must come from a local probe and review. The tokenizer digest must match the exact tokenizer file mounted for the worker.
+Embedding model, digest, and dimension must come from a probe and review. Ollama reports its embedding model digest. Hosted embedding APIs do not expose a weights digest, so set `EMBEDDING_MODEL_DIGEST` to an operator-pinned fingerprint and keep it equal to `embeddingDigest` in the shared config. The tokenizer digest must match the exact tokenizer file mounted for the worker.
 
 ## Commands
 
@@ -73,17 +92,17 @@ docker compose run --rm --no-deps \
   llm-backend uv run --no-sync rag-eval --dataset all
 ```
 
-The runner writes JSON and Markdown reports under `llm-backend/evals/reports/`. Use `--dataset astrarail` or `--dataset helios_city` to run one suite, `--limit 3` for a short run, and `--keep-documents` to retain the temporary indexed corpus. It reports answer token F1, unanswerable abstention accuracy, citation presence, and latency with model/config and dataset hashes. The supplied suites do not label supporting source spans, so the report cannot claim retrieval recall or factual grounding; review answers and citations before drawing quality conclusions.
+The runner writes JSON and Markdown reports under `llm-backend/evals/reports/`. Use `--dataset astrarail` or `--dataset helios_city` to run one suite, `--limit 3` for a short run, and `--keep-documents` to retain the temporary indexed corpus. It reports answer token F1, unanswerable abstention accuracy, citation presence, and latency with selected provider/model IDs, index config, and dataset hashes. The supplied suites do not label supporting source spans, so the report cannot claim retrieval recall or factual grounding; review answers and citations before drawing quality conclusions.
 
 To evaluate an already-indexed document instead of uploading a temporary corpus, pass `--source astrarail=<document-uuid>` or `--source helios_city=<document-uuid>`.
 
-`rag-probe` reports exact Ollama model tags/digests, a live embedding dimension, model context metadata when available, and a short generation response. It does not select a tokenizer or write the reviewed index config. Ollama's local model list, generation, embedding, and model-info endpoints are documented in its [API reference](https://docs.ollama.com/api).
+`rag-probe` exercises the selected generation and embedding adapters with sample requests. For Ollama it also reports model digests and context metadata; hosted embedding providers report the configured embedding fingerprint. It does not select a tokenizer or write the reviewed index config. Ollama's local model list, generation, embedding, and model-info endpoints are documented in its [API reference](https://docs.ollama.com/api).
 
 Psycopg uses an async connection pool and registers pgvector for each connection. Readiness checks the shared `chunks.embedding` dimension against the config and live embedding model. The adapter uses explicit HTTP timeouts and separate per-process generation and embedding semaphores.
 
 ## API contract
 
-`GET /health/live` is process liveness. `GET /health/ready` checks PostgreSQL schema, the reviewed config, local model availability, the embedding digest, and live vector dimension. Both are internal-network endpoints.
+`GET /health/live` is process liveness. `GET /health/ready` checks PostgreSQL schema, the reviewed config, selected provider model availability, the embedding fingerprint, and live vector dimension. Both are internal-network endpoints.
 
 `POST /internal/chat` requires `Authorization: Bearer <INTERNAL_API_TOKEN>` and accepts/returns contract version `1.0.0`. The implementation validates request structure, history pairing, unique source documents, active generation scope, citation labels, and response markers.
 
@@ -93,7 +112,7 @@ OpenAPI is exported to `openapi.json` from the FastAPI app. No schema migrations
 
 - Run API and worker from the same image with separate entrypoints. Mount uploads read-only in the worker and mount the same reviewed config in both services.
 - API timeout defaults to 120 seconds, below the NestJS 130-second and browser 150-second deadlines. Rebenchmark before changing these values.
-- Probe and record model digests whenever models are upgraded. Changing the embedding model or dimension requires a new full index generation.
+- Probe and record the embedding fingerprint whenever models are upgraded. Changing the embedding model or dimension requires a new full index generation.
 - Worker leases last 90 seconds and are renewed every 20 seconds. Expired jobs are retried up to three automatic attempts; a document-level failure leaves an existing active generation in place.
 - Upload storage is mounted read-only in the worker. Every write verifies the lease and deletion state; chunk batches reserve the shared 5,000-row capacity before insertion.
 - The selected tokenizer must be pinned in `tokenizerVersion`; Ollama's REST API does not expose token counting.

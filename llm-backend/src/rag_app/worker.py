@@ -20,7 +20,9 @@ from rag_app.errors import (
 from rag_app.ingestion.chunking import CHUNKER_VERSION, IngestionChunk, chunk_document
 from rag_app.ingestion.errors import IngestionFailure, LeaseLost, RetryableIngestionFailure
 from rag_app.ingestion.parsing import parse_file, resolve_storage_path
-from rag_app.providers.ollama import EmbeddingInput, OllamaProvider, find_model
+from rag_app.providers.factory import create_provider
+from rag_app.providers.models import EmbeddingInput
+from rag_app.providers.protocols import LLMProvider
 from rag_app.repositories.database import Database
 from rag_app.repositories.ingestion import (
     LEASE_SECONDS,
@@ -56,7 +58,7 @@ def _load_tokenizer(settings: Settings, config: IndexConfiguration) -> Tokenizer
 
 async def _check_dependencies() -> int:
     settings = Settings()
-    provider = OllamaProvider(settings)
+    provider = create_provider(settings)
     database = Database(settings)
     try:
         if settings.upload_dir is None:
@@ -65,18 +67,13 @@ async def _check_dependencies() -> int:
             raise ValueError("UPLOAD_DIR is unavailable")
         config = load_index_configuration(settings.index_config_path)
         _load_tokenizer(settings, config)
-        if settings.embedding_model != config.embedding_model:
-            raise ValueError("EMBEDDING_MODEL does not match the shared index configuration")
         if settings.database_dsn is None:
             raise ValueError("DATABASE_URL is not configured")
         await database.open()
         dimension = await database.check_schema()
         if dimension != config.embedding_dimension:
             raise ValueError("index_dimension_mismatch")
-        models = await provider.list_models()
-        model = find_model(models, config.embedding_model)
-        if model.digest.lower() != config.embedding_digest.lower():
-            raise ValueError("embedding_model_digest_mismatch")
+        await provider.check_readiness(config, require_generation=False)
     except (DatabaseSchemaUnavailable, DatabaseUnavailable, ProviderError, ValueError) as exc:
         print(json.dumps({"workerStatus": "blocked", "reason": str(exc)}), file=sys.stderr)
         return 1
@@ -108,7 +105,7 @@ class IngestionWorker:
         config: IndexConfiguration,
         tokenizer: Tokenizer,
         database: Database,
-        provider: OllamaProvider,
+        provider: LLMProvider,
         stop_event: asyncio.Event,
     ) -> None:
         self._settings = settings
@@ -326,14 +323,12 @@ async def _run_worker() -> int:
     try:
         config = load_index_configuration(settings.index_config_path)
         tokenizer = _load_tokenizer(settings, config)
-        if settings.embedding_model != config.embedding_model:
-            raise ValueError("EMBEDDING_MODEL does not match the shared index configuration")
     except ValueError as exc:
         print(json.dumps({"workerStatus": "blocked", "reason": str(exc)}), file=sys.stderr)
         return 1
 
     database = Database(settings)
-    provider = OllamaProvider(settings)
+    provider = create_provider(settings)
     try:
         if settings.database_dsn is None:
             raise ValueError("DATABASE_URL is not configured")
@@ -341,10 +336,7 @@ async def _run_worker() -> int:
         dimension = await database.check_schema()
         if dimension != config.embedding_dimension:
             raise ValueError("index_dimension_mismatch")
-        models = await provider.list_models()
-        embedding_model = find_model(models, config.embedding_model)
-        if embedding_model.digest.lower() != config.embedding_digest.lower():
-            raise ValueError("embedding_model_digest_mismatch")
+        await provider.check_readiness(config, require_generation=False)
     except (DatabaseSchemaUnavailable, DatabaseUnavailable, ProviderError, ValueError) as exc:
         print(json.dumps({"workerStatus": "blocked", "reason": str(exc)}), file=sys.stderr)
         await database.close()

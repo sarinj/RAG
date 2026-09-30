@@ -11,7 +11,8 @@ from rag_app.errors import ProviderProtocolError, ServiceError
 from rag_app.generation.answers import insufficient_evidence_response, parse_answer
 from rag_app.generation.prompts import ChatPromptBuilder
 from rag_app.models import ChatRequest, ChatResponse, EvidenceRecord
-from rag_app.providers.ollama import EmbeddingInput, GenerationInput, OllamaProvider
+from rag_app.providers.models import EmbeddingInput, GenerationInput
+from rag_app.providers.protocols import LLMProvider
 from rag_app.repositories.database import Database
 from rag_app.repositories.retrieval import RetrievalRepository, evidence_key
 
@@ -33,7 +34,7 @@ class BaselineChatExecutor:
     def __init__(
         self,
         database: Database,
-        provider: OllamaProvider,
+        provider: LLMProvider,
         config: IndexConfiguration,
         tokenizer: Tokenizer,
     ) -> None:

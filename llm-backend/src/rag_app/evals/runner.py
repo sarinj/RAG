@@ -18,7 +18,6 @@ import httpx
 
 from rag_app.config import Settings, load_index_configuration
 from rag_app.evals.datasets import EvaluationCase, EvaluationDataset, load_datasets
-from rag_app.providers.ollama import OllamaProvider
 
 DEFAULT_BACKEND_URL = "http://backend:3001"
 DEFAULT_LLM_URL = "http://llm-backend:8000"
@@ -124,20 +123,6 @@ async def run_evaluation(args: argparse.Namespace) -> int:
                 }
             )
 
-        model_digest: str | None = None
-        provider = OllamaProvider(settings)
-        try:
-            model_tags = await provider.list_models()
-            for model in model_tags:
-                if settings.generation_model in {model.name, model.model}:
-                    model_digest = model.digest
-                    break
-        except Exception:
-            # The service readiness endpoint already verified that the configured model exists.
-            pass
-        finally:
-            await provider.close()
-
     try:
         index_config = load_index_configuration(settings.index_config_path)
         index_identifiers: dict[str, Any] = {
@@ -155,8 +140,9 @@ async def run_evaluation(args: argparse.Namespace) -> int:
         "startedAt": started_at.isoformat(),
         "durationSeconds": round(monotonic() - started, 2),
         "configuration": {
+            "provider": settings.llm_provider,
+            "embeddingProvider": settings.active_embedding_provider,
             "generationModel": settings.generation_model,
-            "generationModelDigest": model_digest,
             "retrievalMode": "vector",
             **index_identifiers,
         },
@@ -539,8 +525,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "",
         f"Started: {report['startedAt']}",
         f"Duration: {report['durationSeconds']} seconds",
+        f"Provider: `{configuration['provider']}`",
         f"Generation model: `{configuration['generationModel']}`",
-        f"Generation model digest: `{configuration['generationModelDigest'] or 'unavailable'}`",
         f"Retrieval mode: `{configuration['retrievalMode']}`",
         "",
         "## Aggregate metrics",
