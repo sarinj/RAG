@@ -1,0 +1,152 @@
+# Harborlight Regional Operations Manual
+
+Manual version: 2.6
+Status: approved
+Effective date: 2026-09-01
+Owner: Harborlight Regional Operations Office
+
+## Current fares and transfers
+
+The adult single fare is 2.40 Harborlight Credits.
+
+The daily mobility pass costs 8.40 Harborlight Credits and is valid until the end of the service day on which it is first used.
+
+The annual network pass costs 420 Harborlight Credits and covers city buses and trams for one calendar year.
+
+One validated single fare allows transfers between city buses and trams for 75 minutes. The Airport Express service is excluded from this transfer rule.
+
+Verified students and Harborlight residents aged 65 or older receive a 20 percent discount on monthly and annual network passes. The discount does not apply to single fares or daily passes.
+
+Fare inspectors accept a digital receipt or a printed pass as proof of payment. A bank-card authorization alone is not proof that a fare was validated.
+
+## Archived fare notice
+
+The fare notice issued in 2024 allowed a 60-minute transfer between city buses and trams. That notice was superseded on 2026-09-01 by the current fares and transfers section of Manual version 2.6.
+
+The archived notice listed the adult single fare as 2.25 Harborlight Credits. That amount is historical and must not be used for current fare questions.
+
+## Route schedules and holidays
+
+Route C7 runs from 05:30 until 23:15 on weekdays. Its Saturday service runs from 07:00 until 22:00.
+
+Route C7 does not operate on designated public holidays, including Harbor Day.
+
+Route D2 operates from 06:00 until 20:00 on designated public holidays. Its weekday schedule is 05:00 until 22:30.
+
+Route R4 is an evening bus route. On weekdays it runs from 18:00 until 00:30, with its final departure leaving the Harbor Square terminal at 00:30.
+
+The printed schedule for Route C7 is updated each March. Real-time service alerts take precedence when a temporary detour or cancellation is active.
+
+## Accessibility and travel assistance
+
+The Harborlight Access Desk arranges boarding assistance for passengers who need a ramp or a station escort. Requests should be submitted at least 48 hours before travel.
+
+The Access Desk telephone number is 555-0148. It is staffed daily from 06:00 until 22:00.
+
+If a station elevator is out of service, the control room must publish an accessibility alert and identify the nearest step-free alternate station. Staff must not promise that an elevator will be repaired by a particular time unless Facilities has confirmed the repair window.
+
+Passengers may bring one mobility device without an additional fare. Oversized cargo bikes must use the marked accessible bay only when no wheelchair user is waiting to board.
+
+## Rail signal operations
+
+The signal reset checklist is labeled SIG-882. It applies only after the affected train has been removed from passenger service and the rail controller has authorized the reset.
+
+The operator records the signal location, the displayed fault code, and the time of isolation before beginning SIG-882. A reset attempt without controller authorization is prohibited.
+
+The separate SIG-828 checklist covers a failed platform display. It does not authorize work on trackside signals.
+
+When two signal faults appear together, staff must report both codes to the rail controller rather than selecting the checklist with the closer-looking number.
+
+## Fleet batteries and depot stock
+
+Battery packs below 22 percent state of charge are removed from the electric-bus service rotation and sent to the depot charging bay.
+
+Depot H-4 begins each morning shift with 18 fully charged spare battery packs. Packs are counted at shift handover; packs already assigned to a bus are not included in the spare count.
+
+Depot H-7 begins each morning shift with 11 fully charged spare battery packs. Its charging equipment is not compatible with the H-4 battery model.
+
+Fleet Control reviews the low-charge report at 04:30 each day. A pack may return to service only after its diagnostic test passes and the recorded state of charge is at least 80 percent.
+
+Battery fault code BATT-204 means that a pack failed its temperature check. Code BATT-240 means that the charger did not complete a session; it does not by itself indicate a pack failure.
+
+## Rail maintenance and wheel alarms
+
+Preventive inspection for a passenger rail vehicle is due every 6,000 kilometres.
+
+After a wheel assembly repair, the vehicle must complete a 30-minute controlled validation run before returning to passenger service.
+
+A wheel-temperature alarm at or above 88 degrees Celsius requires the train to be removed from passenger service until a technician completes an inspection.
+
+The maintenance log must include the vehicle number, the alarm reading, the inspection result, and the name of the technician who released the vehicle.
+
+Door-sensor code DOOR-318 requires a platform-side inspection. It does not replace the wheel-temperature response.
+
+## Heavy rain and flood response
+
+Harborlight issues a flood watch when rainfall reaches 35 millimetres within any rolling three-hour period.
+
+The flood watch instructs the Operations Desk to notify the rail controller, stage a track-inspection crew, and monitor the underpass gauges every 15 minutes.
+
+An inspection crew must arrive at the assigned underpass within 25 minutes after an alert is issued.
+
+Rail service through an underpass must be suspended when standing water reaches 15 centimetres above the marked rail-bed reference line. The controller may suspend service sooner if debris or current creates an immediate hazard.
+
+The crew records the gauge reading and a timestamp before requesting that service resume. A falling water level alone is not approval to reopen the route.
+
+## Purchasing and vendor selection
+
+For a purchase below 25,000 Harborlight Credits, the requesting team must attach one written price quote and a short business justification.
+
+For a purchase from 25,000 through 99,999 Harborlight Credits, the team must obtain three written quotes and record the selection reason.
+
+A purchase of 100,000 Harborlight Credits or more requires an open competitive tender administered by Procurement.
+
+The value is calculated across the full contract term, including planned extensions. Dividing one planned purchase into smaller orders to avoid a threshold is prohibited.
+
+An emergency purchase may use the emergency exception only when the Operations Director records the immediate risk and Procurement logs the exception within two business days.
+
+## Water quality response
+
+Water-quality procedure WQ-31 applies when a treatment-plant turbidity reading exceeds 0.8 NTU.
+
+The operator must take a confirmatory sample, notify the shift supervisor, and pause discharge from the affected treatment line until the confirmatory result is reviewed.
+
+The separate WQ-13 procedure covers a low chlorine residual. It does not replace WQ-31 when a turbidity reading is above its limit.
+
+Operators record the sample time, instrument identifier, reading, and supervisor notification in the plant log. A verbal notification does not replace the written log entry.
+
+## Fire and emergency command
+
+Emergency checklist FIRE-27 requires staff to evacuate the affected public area and call emergency services when smoke or an uncontrolled flame is reported inside a station.
+
+The station supervisor then reports the station name, affected entrance, and evacuation status to the Operations Desk. Staff must not re-enter until emergency services authorize access.
+
+FIRE-72 is the checklist for a fire-alarm panel fault with no report of smoke or flame. It requires a technician call and a station announcement, but it does not direct a full evacuation by itself.
+
+## Data handling and camera recordings
+
+Station camera recordings are retained for 30 days unless an incident hold is opened. An incident hold preserves the relevant recording until the case owner releases it.
+
+Routine service dashboards must not display passenger names, payment-card numbers, or unmasked contact details.
+
+Operational event logs are retained for 365 days. This retention period does not authorize staff to export passenger-level records to personal devices.
+
+## Lost property and service desk
+
+Lost property is held at the Harbor Square Service Desk for 45 calendar days. Unclaimed items are then transferred to the municipal property office for disposal or donation review.
+
+The city service desk can be reached at 311 for general transit questions. It cannot approve refunds while a fare dispute is under review.
+
+## Staff communications and service alerts
+
+The Operations Desk publishes a service alert after a route closure is confirmed by the responsible controller. Draft alerts must be labeled unconfirmed and are not sent to passenger channels.
+
+For a planned weekend maintenance closure, Communications should receive the approved route impact at least five calendar days before the closure begins.
+
+An urgent safety closure has no five-day notice requirement. The controller issues the closure immediately and Communications publishes the confirmed alert as soon as the route details are verified.
+
+## Document precedence
+
+Manual version 2.6 is the approved source for current Harborlight operating procedures as of 2026-09-01. Archived notices remain available for historical questions but do not override an active section of version 2.6.
+
+When this manual gives a numeric threshold and a local checklist appears to differ, staff must follow the active manual and ask the responsible supervisor to resolve the discrepancy before acting.

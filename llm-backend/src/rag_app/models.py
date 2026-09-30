@@ -113,6 +113,7 @@ class RetrievedCandidate(WireModel):
 class EvaluationChatResponse(WireModel):
     response: ChatResponse
     retrieval_candidates: list[RetrievedCandidate]
+    reranked_candidates: list[RetrievedCandidate]
 
 
 class ErrorEnvelope(WireModel):

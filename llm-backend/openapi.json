@@ -215,11 +215,19 @@
             },
             "title": "Retrievalcandidates",
             "type": "array"
+          },
+          "rerankedCandidates": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Rerankedcandidates",
+            "type": "array"
           }
         },
         "required": [
           "response",
-          "retrievalCandidates"
+          "retrievalCandidates",
+          "rerankedCandidates"
         ],
         "title": "EvaluationChatResponse",
         "type": "object"

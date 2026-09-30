@@ -1,0 +1,217 @@
+{
+  "version": "2.0",
+  "slug": "pipeline_v2",
+  "name": "Harborlight Regional Operations Pipeline Benchmark",
+  "documentName": "harborlight-operations-v2.txt",
+  "corpusFile": "harborlight_operations_v2.txt",
+  "cases": [
+    {
+      "id": "fare-annual-pass",
+      "category": "direct",
+      "question": "What does an annual network pass cost?",
+      "expectedAnswer": "420 Harborlight Credits per calendar year.",
+      "evidence": ["The annual network pass costs 420 Harborlight Credits and covers city buses and trams for one calendar year."]
+    },
+    {
+      "id": "fare-transfer-window",
+      "category": "exact_term",
+      "question": "How long is a bus-to-tram transfer valid on one fare?",
+      "expectedAnswer": "75 minutes, excluding the Airport Express.",
+      "evidence": ["One validated single fare allows transfers between city buses and trams for 75 minutes. The Airport Express service is excluded from this transfer rule."]
+    },
+    {
+      "id": "fare-version-conflict",
+      "category": "version_conflict",
+      "question": "What transfer window should staff quote for current trips: 60 or 75 minutes?",
+      "expectedAnswer": "75 minutes; the 60-minute notice was superseded.",
+      "evidence": ["One validated single fare allows transfers between city buses and trams for 75 minutes. The Airport Express service is excluded from this transfer rule.", "The fare notice issued in 2024 allowed a 60-minute transfer between city buses and trams. That notice was superseded on 2026-09-01 by the current fares and transfers section of Manual version 2.6."]
+    },
+    {
+      "id": "fare-discount",
+      "category": "multi_hop",
+      "question": "Which riders qualify for the pass discount, and how large is it?",
+      "expectedAnswer": "Verified students and Harborlight residents aged 65 or older receive 20 percent off monthly and annual passes.",
+      "evidence": ["Verified students and Harborlight residents aged 65 or older receive a 20 percent discount on monthly and annual network passes. The discount does not apply to single fares or daily passes."]
+    },
+    {
+      "id": "fare-two-day-cost",
+      "category": "multi_hop",
+      "question": "How much do two daily mobility passes cost in total?",
+      "expectedAnswer": "Two daily passes cost 16.80 Harborlight Credits.",
+      "evidence": ["The daily mobility pass costs 8.40 Harborlight Credits and is valid until the end of the service day on which it is first used."]
+    },
+    {
+      "id": "route-holiday-followup",
+      "category": "follow_up",
+      "question": "Does it run on Harbor Day?",
+      "history": [
+        {"role": "user", "content": "What are Route C7's weekday operating hours?"},
+        {"role": "assistant", "content": "Route C7 runs from 05:30 until 23:15 on weekdays."}
+      ],
+      "expectedAnswer": "No. Route C7 does not operate on designated public holidays, including Harbor Day.",
+      "evidence": ["Route C7 does not operate on designated public holidays, including Harbor Day."]
+    },
+    {
+      "id": "route-d2-holiday",
+      "category": "direct",
+      "question": "What are Route D2's hours on a designated public holiday?",
+      "expectedAnswer": "06:00 to 20:00.",
+      "evidence": ["Route D2 operates from 06:00 until 20:00 on designated public holidays. Its weekday schedule is 05:00 until 22:30."]
+    },
+    {
+      "id": "access-booking-notice",
+      "category": "semantic",
+      "question": "How far ahead should a passenger arrange ramp or station-escort assistance?",
+      "expectedAnswer": "At least 48 hours before travel.",
+      "evidence": ["The Harborlight Access Desk arranges boarding assistance for passengers who need a ramp or a station escort. Requests should be submitted at least 48 hours before travel."]
+    },
+    {
+      "id": "access-desk-number",
+      "category": "exact_term",
+      "question": "What phone number reaches the Harborlight Access Desk?",
+      "expectedAnswer": "555-0148.",
+      "evidence": ["The Access Desk telephone number is 555-0148. It is staffed daily from 06:00 until 22:00."]
+    },
+    {
+      "id": "signal-checklist-code",
+      "category": "exact_term",
+      "question": "Which checklist covers an authorized rail signal reset?",
+      "expectedAnswer": "SIG-882, after the train is removed from service and the controller authorizes the reset.",
+      "evidence": ["The signal reset checklist is labeled SIG-882. It applies only after the affected train has been removed from passenger service and the rail controller has authorized the reset."]
+    },
+    {
+      "id": "signal-near-match",
+      "category": "exact_term",
+      "question": "Does SIG-828 authorize trackside signal work?",
+      "expectedAnswer": "No. SIG-828 covers a failed platform display, not trackside signals.",
+      "evidence": ["The separate SIG-828 checklist covers a failed platform display. It does not authorize work on trackside signals."]
+    },
+    {
+      "id": "battery-threshold-followup",
+      "category": "follow_up",
+      "question": "At what charge level is a pack taken out of rotation?",
+      "history": [
+        {"role": "user", "content": "What does Fleet Control do with bus battery packs that are nearly empty?"},
+        {"role": "assistant", "content": "Fleet Control reviews the low-charge report at 04:30 each day."}
+      ],
+      "expectedAnswer": "Packs below 22 percent state of charge are removed from the electric-bus service rotation.",
+      "evidence": ["Battery packs below 22 percent state of charge are removed from the electric-bus service rotation and sent to the depot charging bay."]
+    },
+    {
+      "id": "depot-h4-stock",
+      "category": "direct",
+      "question": "How many fully charged spare packs does Depot H-4 start with each morning?",
+      "expectedAnswer": "18 fully charged spare battery packs.",
+      "evidence": ["Depot H-4 begins each morning shift with 18 fully charged spare battery packs. Packs are counted at shift handover; packs already assigned to a bus are not included in the spare count."]
+    },
+    {
+      "id": "wheel-alarm-response",
+      "category": "semantic",
+      "question": "What must happen when a passenger train reports a wheel temperature of 90 degrees Celsius?",
+      "expectedAnswer": "Remove it from passenger service until a technician completes an inspection.",
+      "evidence": ["A wheel-temperature alarm at or above 88 degrees Celsius requires the train to be removed from passenger service until a technician completes an inspection."]
+    },
+    {
+      "id": "maintenance-two-part",
+      "category": "multi_hop",
+      "question": "How often are rail vehicles inspected, and how long is the controlled run after a wheel repair?",
+      "expectedAnswer": "Every 6,000 kilometres; the post-repair validation run lasts 30 minutes.",
+      "evidence": ["Preventive inspection for a passenger rail vehicle is due every 6,000 kilometres.", "After a wheel assembly repair, the vehicle must complete a 30-minute controlled validation run before returning to passenger service."]
+    },
+    {
+      "id": "flood-watch-threshold",
+      "category": "semantic",
+      "question": "What rainfall measurement starts Harborlight's flood watch?",
+      "expectedAnswer": "35 millimetres within any rolling three-hour period.",
+      "evidence": ["Harborlight issues a flood watch when rainfall reaches 35 millimetres within any rolling three-hour period."]
+    },
+    {
+      "id": "flood-response-timing",
+      "category": "multi_hop",
+      "question": "If an underpass alert is issued at 18:10, by what time must the inspection crew arrive?",
+      "expectedAnswer": "By 18:35.",
+      "evidence": ["An inspection crew must arrive at the assigned underpass within 25 minutes after an alert is issued."]
+    },
+    {
+      "id": "flood-close-threshold",
+      "category": "exact_term",
+      "question": "At what standing-water depth must rail service through an underpass be suspended?",
+      "expectedAnswer": "15 centimetres above the marked rail-bed reference line.",
+      "evidence": ["Rail service through an underpass must be suspended when standing water reaches 15 centimetres above the marked rail-bed reference line. The controller may suspend service sooner if debris or current creates an immediate hazard."]
+    },
+    {
+      "id": "procurement-mid-tier",
+      "category": "direct",
+      "question": "What documentation is required for a 40,000-credit purchase?",
+      "expectedAnswer": "Three written quotes and a recorded selection reason.",
+      "evidence": ["For a purchase from 25,000 through 99,999 Harborlight Credits, the team must obtain three written quotes and record the selection reason."]
+    },
+    {
+      "id": "procurement-threshold",
+      "category": "exact_term",
+      "question": "At what purchase value does an open competitive tender become mandatory?",
+      "expectedAnswer": "At 100,000 Harborlight Credits or more.",
+      "evidence": ["A purchase of 100,000 Harborlight Credits or more requires an open competitive tender administered by Procurement."]
+    },
+    {
+      "id": "water-procedure-code",
+      "category": "exact_term",
+      "question": "Which water-quality procedure applies above 0.8 NTU turbidity, and what is the immediate response?",
+      "expectedAnswer": "WQ-31: take a confirmatory sample, notify the shift supervisor, and pause discharge from the affected line.",
+      "evidence": ["Water-quality procedure WQ-31 applies when a treatment-plant turbidity reading exceeds 0.8 NTU.", "The operator must take a confirmatory sample, notify the shift supervisor, and pause discharge from the affected treatment line until the confirmatory result is reviewed."]
+    },
+    {
+      "id": "camera-retention",
+      "category": "direct",
+      "question": "How long are station camera recordings normally retained?",
+      "expectedAnswer": "30 days, unless an incident hold is opened.",
+      "evidence": ["Station camera recordings are retained for 30 days unless an incident hold is opened. An incident hold preserves the relevant recording until the case owner releases it."]
+    },
+    {
+      "id": "fire-checklist",
+      "category": "exact_term",
+      "question": "What does checklist FIRE-27 require when smoke is reported inside a station?",
+      "expectedAnswer": "Evacuate the affected public area and call emergency services.",
+      "evidence": ["Emergency checklist FIRE-27 requires staff to evacuate the affected public area and call emergency services when smoke or an uncontrolled flame is reported inside a station."]
+    },
+    {
+      "id": "route-c7-followup",
+      "category": "follow_up",
+      "question": "And what is its Saturday service window?",
+      "history": [
+        {"role": "user", "content": "When does Route C7 run on weekdays?"},
+        {"role": "assistant", "content": "Route C7 runs from 05:30 until 23:15 on weekdays."}
+      ],
+      "expectedAnswer": "07:00 to 22:00.",
+      "evidence": ["Its Saturday service runs from 07:00 until 22:00."]
+    },
+    {
+      "id": "unanswerable-finance-lead",
+      "category": "unanswerable",
+      "question": "Who is Harborlight's current chief finance officer?",
+      "expectedAnswer": null,
+      "evidence": []
+    },
+    {
+      "id": "unanswerable-driver-pay",
+      "category": "unanswerable",
+      "question": "What is the hourly wage for a Route C7 driver?",
+      "expectedAnswer": null,
+      "evidence": []
+    },
+    {
+      "id": "unanswerable-foreign-route",
+      "category": "unanswerable",
+      "question": "What time does the Lakeshore airport shuttle leave on Sundays?",
+      "expectedAnswer": null,
+      "evidence": []
+    },
+    {
+      "id": "unanswerable-fabricated-code",
+      "category": "unanswerable",
+      "question": "What does maintenance code HYD-999 require operators to do?",
+      "expectedAnswer": null,
+      "evidence": []
+    }
+  ]
+}

@@ -146,10 +146,11 @@ async def run_evaluation(args: argparse.Namespace) -> int:
         "embeddingDimension": index_config.embedding_dimension,
         "chunkerVersion": index_config.chunker_version,
         "tokenizerVersion": index_config.tokenizer_version,
+        "contextPromptVersion": index_config.context_prompt_version,
     }
 
     report = {
-        "reportVersion": 1,
+        "reportVersion": 2,
         "startedAt": started_at.isoformat(),
         "durationSeconds": round(monotonic() - started, 2),
         "configuration": {
@@ -170,13 +171,14 @@ async def run_evaluation(args: argparse.Namespace) -> int:
                 "it does not establish semantic correctness."
             ),
             (
-                "Retrieval Hit@5/10 and Recall@5/10 use manually labeled evidence spans "
-                "for a subset of answerable cases; they measure candidate overlap, not answer grounding."
+                "Candidate Recall@30 measures overlap with manually labeled source spans before reranking; "
+                "reranked Recall@5 measures overlap in the final prompt evidence set."
             ),
             (
-                "The chat API validates that citations resolve to retrieved evidence; "
-                "valid citations alone do not prove factual grounding."
+                "Citation evidence precision and recall compare cited chunk spans with the labeled evidence; "
+                "valid citation IDs alone do not establish factual correctness."
             ),
+            "Follow-up cases include prior user/assistant turns and score the current question's answer.",
         ],
     }
     stamp = started_at.strftime("%Y%m%dT%H%M%SZ")
@@ -386,7 +388,7 @@ async def _evaluate_case(
         "contractVersion": "1.0.0",
         "requestId": str(uuid4()),
         "question": case.question,
-        "history": [],
+        "history": list(case.history),
         "sources": [
             {
                 "documentId": document["id"],
@@ -408,6 +410,7 @@ async def _evaluate_case(
                 "caseId": case.case_id,
                 "category": case.category,
                 "question": case.question,
+                "history": list(case.history),
                 "expectedAnswer": case.expected_answer,
                 "answer": None,
                 "answerStatus": None,
@@ -433,10 +436,12 @@ async def _evaluate_case(
         citations = answer_data.get("citations", [])
         is_unanswerable = case.expected_answer is None
         candidates = evaluation_data["retrievalCandidates"]
+        reranked_candidates = evaluation_data["rerankedCandidates"]
         return {
             "caseId": case.case_id,
             "category": case.category,
             "question": case.question,
+            "history": list(case.history),
             "expectedAnswer": case.expected_answer,
             "answer": answer,
             "answerStatus": answer_status,
@@ -450,7 +455,9 @@ async def _evaluate_case(
             ),
             "citationCount": len(citations),
             "retrieval": (
-                _retrieval_metrics(case, candidates) if case.evidence_spans else None
+                _retrieval_metrics(case, candidates, reranked_candidates, citations)
+                if case.evidence_spans
+                else None
             ),
             "latencyMs": elapsed_ms,
             "error": None,
@@ -460,6 +467,7 @@ async def _evaluate_case(
             "caseId": case.case_id,
             "category": case.category,
             "question": case.question,
+            "history": list(case.history),
             "expectedAnswer": case.expected_answer,
             "answer": None,
             "answerStatus": None,
@@ -477,24 +485,67 @@ async def _evaluate_case(
 def _retrieval_metrics(
     case: EvaluationCase,
     candidates: list[dict[str, Any]],
+    reranked_candidates: list[dict[str, Any]],
+    citations: list[dict[str, Any]],
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "annotatedEvidenceCount": len(case.evidence_spans),
+        "retrievedCandidateCount": len(candidates),
+        "rerankedCandidateCount": len(reranked_candidates),
         "retrievedChunkIds": [candidate["chunkId"] for candidate in candidates],
+        "rerankedChunkIds": [candidate["chunkId"] for candidate in reranked_candidates],
     }
-    for cutoff in (5, 10):
-        top_candidates = candidates[:cutoff]
-        covered = [
-            any(
-                candidate["sourceStart"] < evidence_end
-                and candidate["sourceEnd"] > evidence_start
-                for candidate in top_candidates
-            )
+
+    for prefix, ranked_candidates, cutoffs in (
+        ("candidate", candidates, (5, 10, 30)),
+        ("reranked", reranked_candidates, (5,)),
+    ):
+        for cutoff in cutoffs:
+            covered = _covered_evidence(case.evidence_spans, ranked_candidates[:cutoff])
+            result[f"{prefix}HitAt{cutoff}"] = any(covered)
+            result[f"{prefix}RecallAt{cutoff}"] = round(sum(covered) / len(covered), 4)
+
+    candidate_ranges = {
+        candidate["chunkId"]: (candidate["sourceStart"], candidate["sourceEnd"])
+        for candidate in [*candidates, *reranked_candidates]
+    }
+    cited_ranges = [
+        candidate_ranges[citation["chunkId"]]
+        for citation in citations
+        if citation.get("chunkId") in candidate_ranges
+    ]
+    relevant_citations = sum(
+        any(
+            start < evidence_end and end > evidence_start
             for evidence_start, evidence_end in case.evidence_spans
-        ]
-        result[f"hitAt{cutoff}"] = any(covered)
-        result[f"recallAt{cutoff}"] = round(sum(covered) / len(covered), 4)
+        )
+        for start, end in cited_ranges
+    )
+    cited_candidates = [
+        {"sourceStart": start, "sourceEnd": end}
+        for start, end in cited_ranges
+    ]
+    evidence_cited = _covered_evidence(case.evidence_spans, cited_candidates)
+    result["citationEvidencePrecision"] = round(
+        relevant_citations / len(citations) if citations else 0.0,
+        4,
+    )
+    result["citationEvidenceRecall"] = round(sum(evidence_cited) / len(evidence_cited), 4)
     return result
+
+
+def _covered_evidence(
+    evidence_spans: tuple[tuple[int, int], ...],
+    candidates: list[dict[str, Any]],
+) -> list[bool]:
+    return [
+        any(
+            candidate["sourceStart"] < evidence_end
+            and candidate["sourceEnd"] > evidence_start
+            for candidate in candidates
+        )
+        for evidence_start, evidence_end in evidence_spans
+    ]
 
 
 def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
@@ -520,10 +571,26 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
         "unanswerableCases": len(unanswerable),
         "retrievalAnnotatedCases": len(retrieval_cases),
         "retrievalFailedCases": sum(case.get("error") is not None for case in retrieval_cases),
-        "retrievalHitRateAt5": _mean_metric(successful_retrieval_cases, "hitAt5"),
-        "retrievalRecallAt5": _mean_metric(successful_retrieval_cases, "recallAt5"),
-        "retrievalHitRateAt10": _mean_metric(successful_retrieval_cases, "hitAt10"),
-        "retrievalRecallAt10": _mean_metric(successful_retrieval_cases, "recallAt10"),
+        "meanRetrievedCandidateCount": _mean_metric(
+            successful_retrieval_cases,
+            "retrievedCandidateCount",
+        ),
+        "meanRerankedCandidateCount": _mean_metric(
+            successful_retrieval_cases,
+            "rerankedCandidateCount",
+        ),
+        "candidateHitRateAt30": _mean_metric(successful_retrieval_cases, "candidateHitAt30"),
+        "candidateRecallAt30": _mean_metric(successful_retrieval_cases, "candidateRecallAt30"),
+        "rerankedHitRateAt5": _mean_metric(successful_retrieval_cases, "rerankedHitAt5"),
+        "rerankedRecallAt5": _mean_metric(successful_retrieval_cases, "rerankedRecallAt5"),
+        "citationEvidencePrecision": _mean_metric(
+            successful_retrieval_cases,
+            "citationEvidencePrecision",
+        ),
+        "citationEvidenceRecall": _mean_metric(
+            successful_retrieval_cases,
+            "citationEvidenceRecall",
+        ),
         "answerableMeanTokenF1": round(statistics.mean(f1_values), 4) if f1_values else None,
         "answerableTokenF1AtLeast0_5": (
             round(sum(value >= 0.5 for value in f1_values) / len(f1_values), 4)
@@ -603,9 +670,17 @@ def _render_console_summary(report: dict[str, Any]) -> str:
         f"Answerable F1 >= 0.5: {metrics['answerableTokenF1AtLeast0_5']}",
         f"Unanswerable abstention accuracy: {metrics['unanswerableAbstentionAccuracy']}",
         (
-            f"Retrieval Hit@5 / Recall@5: {metrics['retrievalHitRateAt5']} / "
-            f"{metrics['retrievalRecallAt5']} "
+            f"Candidate Recall@30: {metrics['candidateRecallAt30']} · "
+            f"Reranked Recall@5: {metrics['rerankedRecallAt5']} "
             f"({metrics['retrievalAnnotatedCases']} labeled cases)"
+        ),
+        (
+            f"Candidate pool / reranked set mean: "
+            f"{metrics['meanRetrievedCandidateCount']} / {metrics['meanRerankedCandidateCount']}"
+        ),
+        (
+            f"Citation evidence precision / recall: "
+            f"{metrics['citationEvidencePrecision']} / {metrics['citationEvidenceRecall']}"
         ),
         f"Answered with citations: {metrics['answeredWithCitationRate']}",
         f"Latency ms p50/p95: {metrics['latencyMsP50']} / {metrics['latencyMsP95']}",
@@ -631,23 +706,32 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"Provider: `{configuration['provider']}`",
         f"Generation model: `{configuration['generationModel']}`",
         f"Retrieval mode: `{configuration['retrievalMode']}`",
+        (
+            "Context indexing: `contextual`"
+            if configuration["contextPromptVersion"]
+            else "Context indexing: `baseline` (no contextual prompt configured)"
+        ),
         "",
         "## Aggregate metrics",
         "",
         (
             "| Cases | Failed | Answerable mean token F1 | Answerable F1 ≥ 0.5 | "
-            "Abstention accuracy | Retrieval Hit@5 / Recall@5 | Citation rate | "
+            "Abstention accuracy | Candidate Recall@30 | Reranked Recall@5 | "
+            "Citation evidence P / R | Citation rate | Mean candidates / reranked | "
             "Latency p50 / p95 ms |"
         ),
-        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         (
             f"| {metrics['totalCases']} | {metrics['failedCases']} | "
             f"{metrics['answerableMeanTokenF1']} | "
             f"{metrics['answerableTokenF1AtLeast0_5']} | "
             f"{metrics['unanswerableAbstentionAccuracy']} | "
-            f"{metrics['retrievalHitRateAt5']} / {metrics['retrievalRecallAt5']} "
-            f"({metrics['retrievalAnnotatedCases']} labeled) | "
+            f"{metrics['candidateRecallAt30']} ({metrics['retrievalAnnotatedCases']} labeled) | "
+            f"{metrics['rerankedRecallAt5']} | "
+            f"{metrics['citationEvidencePrecision']} / {metrics['citationEvidenceRecall']} | "
             f"{metrics['answeredWithCitationRate']} | "
+            f"{metrics['meanRetrievedCandidateCount']} / "
+            f"{metrics['meanRerankedCandidateCount']} | "
             f"{metrics['latencyMsP50']} / {metrics['latencyMsP95']} |"
         ),
         "",
@@ -669,34 +753,47 @@ def _render_markdown(report: dict[str, Any]) -> str:
                 f"Dataset SHA-256: `{metadata['sourceSha256']}`",
                 f"Corpus SHA-256: `{metadata['corpusSha256']}`",
                 "",
-                "| ID | Type | Token F1 | Hit@5 | Recall@5 | Status | Latency ms | Question | Answer | Gold answer |",
-                "| --- | --- | ---: | ---: | ---: | --- | ---: | --- | --- | --- |",
+                "| ID | Type | Token F1 | Candidate Recall@30 | Reranked Recall@5 | Citation evidence P/R | Status | Latency ms | Question | Answer | Gold answer |",
+                "| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | --- | --- | --- |",
             ]
         )
         for case in dataset["cases"]:
             lines.append(
                 (
-                    "| {caseId} | {category} | {f1} | {hit5} | {recall5} | {status} | {latency} | "
+                    "| {caseId} | {category} | {f1} | {candidateRecall} | {rerankedRecall} | "
+                    "{citationPrecision}/{citationRecall} | {status} | {latency} | "
                     "{question} | {answer} | {expected} |"
                 ).format(
                     caseId=_cell(case["caseId"]),
                     category=_cell(case["category"]),
                     f1=case["answerTokenF1"] if case["answerTokenF1"] is not None else "—",
-                    hit5=(
-                        case["retrieval"]["hitAt5"]
+                    candidateRecall=(
+                        case["retrieval"]["candidateRecallAt30"]
                         if case.get("retrieval") is not None
                         and case["retrieval"].get("error") is None
                         else "—"
                     ),
-                    recall5=(
-                        case["retrieval"]["recallAt5"]
+                    rerankedRecall=(
+                        case["retrieval"]["rerankedRecallAt5"]
+                        if case.get("retrieval") is not None
+                        and case["retrieval"].get("error") is None
+                        else "—"
+                    ),
+                    citationPrecision=(
+                        case["retrieval"]["citationEvidencePrecision"]
+                        if case.get("retrieval") is not None
+                        and case["retrieval"].get("error") is None
+                        else "—"
+                    ),
+                    citationRecall=(
+                        case["retrieval"]["citationEvidenceRecall"]
                         if case.get("retrieval") is not None
                         and case["retrieval"].get("error") is None
                         else "—"
                     ),
                     status=_cell(case["answerStatus"] or case["error"] or "error"),
                     latency=case["latencyMs"],
-                    question=_cell(case["question"]),
+                    question=_cell(_display_question(case)),
                     answer=_cell(case["answer"] or ""),
                     expected=_cell(case["expectedAnswer"] or "(abstain)"),
                 )
@@ -707,6 +804,15 @@ def _render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _display_question(case: dict[str, Any]) -> str:
+    history = case.get("history", [])
+    if not history:
+        return case["question"]
+    turns = [f"{message['role']}: {message['content']}" for message in history]
+    turns.append(f"user: {case['question']}")
+    return " → ".join(turns)
+
+
 def _cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
 
@@ -715,7 +821,7 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Evaluate the running RAG service on bundled datasets"
     )
-    parser.add_argument("--dataset", choices=["all", "astrarail", "helios_city"], default="all")
+    parser.add_argument("--dataset", choices=["all", "pipeline_v2"], default="all")
     parser.add_argument(
         "--source",
         action="append",

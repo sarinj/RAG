@@ -262,5 +262,6 @@ class BaselineChatExecutor:
                 response=response,
                 evidence_ids=frozenset(evidence_key(item) for item in selected),
                 retrieved_candidates=tuple(state.get("candidates", [])),
+                reranked_candidates=tuple(state.get("reranked_candidates", [])),
             )
         }

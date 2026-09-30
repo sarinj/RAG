@@ -93,7 +93,7 @@ uv run rag-worker
 
 ## RAG evaluation
 
-`rag-eval` reads the bundled AstraRail and Helios City suites. It separates each question-and-answer section from the source corpus before ingestion, finds reusable documents by their stored SHA-256, and verifies a selected document's content hash before scoring. It uploads a temporary evaluation document through the local backend when needed, calls the authenticated internal evaluation chat endpoint for each case, and requests deletion only for documents created by that run (unless `--keep-documents` is set). AstraRail's expected answers are kept in `evals/datasets/astrarail_answers.json`; Helios answers are parsed from its answer-key section. Existing or explicitly selected documents are left untouched.
+`rag-eval` reads the standalone Harborlight pipeline benchmark in `evals/datasets/pipeline_v2.json` and its separate operations corpus. The benchmark includes exact-term, paraphrase, multi-hop, version-conflict, follow-up, and unanswerable cases; answerable cases carry source excerpts that are mapped to corpus offsets before the run. It finds reusable documents by stored SHA-256, verifies the selected document's content hash, and uploads a temporary source through the local backend when needed. It requests deletion only for documents created by that run (unless `--keep-documents` is set). Existing or explicitly selected documents are left untouched.
 
 Run from the repository root after the Compose stack is ready:
 
@@ -105,9 +105,9 @@ docker compose run --rm --no-deps \
   llm-backend uv run --no-sync rag-eval --dataset all
 ```
 
-The runner writes JSON and Markdown reports under `llm-backend/evals/reports/`. Use `--dataset astrarail` or `--dataset helios_city` to run one suite, `--limit 3` for a short run, and `--keep-documents` to retain a corpus uploaded during that run. It reports answer token F1, unanswerable abstention accuracy, citation presence, latency, and vector-retrieval Hit@5/10 and Recall@5/10 for 26 manually labeled cases, with selected provider/model IDs, index config, and dataset hashes. Retrieval scores measure whether returned chunks overlap labeled source spans; they do not establish factual grounding. Review answers and citations before drawing quality conclusions.
+The runner writes JSON and Markdown reports under `llm-backend/evals/reports/`. Run `--dataset pipeline_v2` for the benchmark, `--limit 3` for a short run, and `--keep-documents` to retain a corpus uploaded during that run. Reports include answer token F1, abstention accuracy, citation presence, latency, candidate Recall@30, reranked Recall@5, and citation-evidence precision/recall. They record selected provider/model IDs, shared index settings, and dataset hashes. These are overlap and lexical metrics, not proof of semantic correctness; review answers and citations before drawing quality conclusions.
 
-To evaluate an already-indexed document instead of uploading a temporary corpus, pass `--source astrarail=<document-uuid>` or `--source helios_city=<document-uuid>`.
+To evaluate an already-indexed benchmark corpus instead of uploading a temporary corpus, pass `--source pipeline_v2=<document-uuid>`.
 
 `rag-probe` exercises the selected generation and embedding adapters with sample requests. For Ollama it also reports model digests and context metadata; hosted embedding providers report the configured embedding fingerprint. It does not select a tokenizer or write the reviewed index config. Ollama's local model list, generation, embedding, and model-info endpoints are documented in its [API reference](https://docs.ollama.com/api).
 

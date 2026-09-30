@@ -38,6 +38,7 @@ class ChatExecutionResult:
     response: ChatResponse
     evidence_ids: frozenset[tuple[UUID, UUID, UUID]]
     retrieved_candidates: tuple[EvidenceRecord, ...] = ()
+    reranked_candidates: tuple[EvidenceRecord, ...] = ()
 
 
 @router.post(
@@ -95,6 +96,14 @@ async def evaluation_chat(
                 source_end=evidence.chunk.source_end,
             )
             for evidence in result.retrieved_candidates
+        ],
+        reranked_candidates=[
+            RetrievedCandidate(
+                chunk_id=evidence.chunk.id,
+                source_start=evidence.chunk.source_start,
+                source_end=evidence.chunk.source_end,
+            )
+            for evidence in result.reranked_candidates
         ],
     )
 
