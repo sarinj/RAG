@@ -32,7 +32,7 @@ class FakeDatabase:
 
 def request_body(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "contractVersion": "1.0.0",
+        "contractVersion": "1.1.0",
         "requestId": REQUEST_ID,
         "question": "What does the source say?",
         "history": [],
@@ -170,7 +170,7 @@ async def test_chat_returns_citations_from_retrieved_source_chunks() -> None:
     chunk_id = "33333333-3333-4333-8333-333333333333"
     chat_response = ChatResponse.model_validate(
         {
-            "contractVersion": "1.0.0",
+            "contractVersion": "1.1.0",
             "requestId": REQUEST_ID,
             "answer": "The source says this [S1].",
             "answerStatus": "answered",
@@ -218,7 +218,7 @@ async def test_chat_returns_citations_from_retrieved_source_chunks() -> None:
 async def test_chat_rejects_citations_outside_retrieved_evidence() -> None:
     chat_response = ChatResponse.model_validate(
         {
-            "contractVersion": "1.0.0",
+            "contractVersion": "1.1.0",
             "requestId": REQUEST_ID,
             "answer": "The source says this [S1].",
             "answerStatus": "answered",
@@ -269,7 +269,7 @@ def test_openapi_advertises_versioned_internal_contract() -> None:
 
     schema = app.openapi()
 
-    assert schema["info"]["version"] == "1.0.0"
+    assert schema["info"]["version"] == "1.1.0"
     assert "/internal/chat" in schema["paths"]
     assert "/health/ready" in schema["paths"]
     assert schema["components"]["securitySchemes"]["InternalBearer"]["type"] == "http"

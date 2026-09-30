@@ -68,7 +68,8 @@
           "answerStatus": {
             "enum": [
               "answered",
-              "insufficient_evidence"
+              "insufficient_evidence",
+              "direct_answer"
             ],
             "title": "Answerstatus",
             "type": "string"
@@ -81,7 +82,7 @@
             "type": "array"
           },
           "contractVersion": {
-            "const": "1.0.0",
+            "const": "1.1.0",
             "title": "Contractversion",
             "type": "string"
           },
@@ -206,6 +207,13 @@
       "EvaluationChatResponse": {
         "additionalProperties": false,
         "properties": {
+          "rerankedCandidates": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Rerankedcandidates",
+            "type": "array"
+          },
           "response": {
             "$ref": "#/components/schemas/ChatResponse"
           },
@@ -214,13 +222,6 @@
               "$ref": "#/components/schemas/RetrievedCandidate"
             },
             "title": "Retrievalcandidates",
-            "type": "array"
-          },
-          "rerankedCandidates": {
-            "items": {
-              "$ref": "#/components/schemas/RetrievedCandidate"
-            },
-            "title": "Rerankedcandidates",
             "type": "array"
           }
         },
@@ -333,7 +334,7 @@
   "info": {
     "description": "Internal chat, model readiness, and worker-facing service boundary.",
     "title": "Learning RAG internal service",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -595,7 +596,7 @@
             "InternalBearer": []
           }
         ],
-        "summary": "Run internal chat and include vector candidates for evaluation",
+        "summary": "Run internal chat and include retrieved candidates for evaluation",
         "tags": [
           "internal chat"
         ]

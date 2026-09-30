@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from pydantic.alias_generators import to_camel
 
-CONTRACT_VERSION = "1.0.0"
+CONTRACT_VERSION = "1.1.0"
 DocumentStatus = Literal["queued", "processing", "ready", "failed", "deleted"]
 CitationLabel = Annotated[str, StringConstraints(pattern=r"^S[1-9][0-9]*$")]
 MessageText = Annotated[
@@ -77,10 +77,10 @@ class Citation(WireModel):
 
 
 class ChatResponse(WireModel):
-    contract_version: Literal["1.0.0"]
+    contract_version: Literal["1.1.0"]
     request_id: UUID
     answer: str
-    answer_status: Literal["answered", "insufficient_evidence"]
+    answer_status: Literal["answered", "insufficient_evidence", "direct_answer"]
     citations: list[Citation]
 
     @model_validator(mode="after")
@@ -91,10 +91,12 @@ class ChatResponse(WireModel):
         answer_labels = set(re.findall(r"\[(S[0-9]+)\]", self.answer))
         if answer_labels != set(labels):
             raise ValueError("answer citation markers must match its citations")
-        if self.answer_status == "answered" and (not self.answer.strip() or not labels):
+        if not self.answer.strip():
+            raise ValueError("chat responses need a nonempty answer")
+        if self.answer_status == "answered" and not labels:
             raise ValueError("answered responses need an answer and at least one citation")
-        if self.answer_status == "insufficient_evidence" and labels:
-            raise ValueError("insufficient-evidence responses cannot include citations")
+        if self.answer_status != "answered" and labels:
+            raise ValueError("non-evidence responses cannot include citations")
         return self
 
 

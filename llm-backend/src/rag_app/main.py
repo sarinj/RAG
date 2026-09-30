@@ -81,7 +81,7 @@ def create_app(
     app = FastAPI(
         title="Learning RAG internal service",
         description="Internal chat, model readiness, and worker-facing service boundary.",
-        version="1.0.0",
+        version="1.1.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,

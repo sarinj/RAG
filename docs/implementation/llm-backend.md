@@ -38,7 +38,7 @@ Chat uses LangGraph `StateGraph` to make request stages and the bounded citation
 2. Add Ollama generation/embedding adapter with explicit timeouts, typed results, and controlled concurrency.
 3. Probe model availability, digest, embedding dimension, tokenizer/input budget behavior, and a representative multilingual sample if required. Report usable configuration to the lead; do not freeze a model from download size alone.
 4. Lead publishes reviewed index config; verify it on startup against live models and database dimension.
-5. Implement Pydantic internal schemas from v1, token validation, error envelope, and OpenAPI export to `llm-backend/openapi.json` version 1.0.0.
+5. Implement Pydantic internal schemas from v1, token validation, error envelope, and OpenAPI export to `llm-backend/openapi.json` version 1.1.0.
 6. Add DB connection management and typed internal document/chunk/evidence records.
 
 Acceptance: Python and NestJS can generate/validate the same internal payloads; model-independent checks work without model downloads; a real probe supplies the exact dimension needed by BE-01. No migrations are added in Python.
@@ -67,7 +67,7 @@ Depends on LLM-02 and reviewed internal contract; integrate with BE-03/04.
 3. Embed query using the provider's required query format. Run exact cosine search with document/generation filtering in SQL.
 4. Select original evidence under a model token budget, preserving source IDs and page/heading context. Assign deterministic per-answer labels S1, S2, etc.
 5. Prompt for evidence-based answers and no-evidence response, treating document instructions as untrusted text.
-6. Validate citation markers against supplied chunks. Permit one bounded repair; fail `INVALID_CITATIONS` if still invalid. Track insufficient-evidence as a normal response with empty citations.
+6. Validate citation markers against supplied chunks. Permit one bounded repair; if it is still invalid, return a safe insufficient-evidence response with empty citations. Track insufficient-evidence as a normal response.
 7. Return only the v1 ChatResponse; do not write messages or expose debug retrieval results through the public contract.
 8. Build 20–30 representative labeled evaluation questions and record baseline recall/hit rate, citation validity, human-reviewed grounding, ingestion time, and answer latency.
 

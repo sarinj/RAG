@@ -151,7 +151,7 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
 
     try {
       const response = await this.llm.chat({
-        contractVersion: '1.0.0',
+        contractVersion: '1.1.0',
         requestId,
         question: content,
         history: created.history,
@@ -526,7 +526,7 @@ function isUniqueViolation(error: unknown): boolean {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function validateCitationMarkers(
-  answerStatus: 'answered' | 'insufficient_evidence',
+  answerStatus: 'answered' | 'insufficient_evidence' | 'direct_answer',
   answer: string,
   citationLabels: string[],
 ): void {
@@ -541,7 +541,7 @@ export function validateCitationMarkers(
   if (answerStatus === 'answered' && labels.size === 0) {
     throw new ApiError('INVALID_CITATIONS', 'An answer needs at least one valid citation.', 422);
   }
-  if (answerStatus === 'insufficient_evidence' && labels.size > 0) {
-    throw new ApiError('INVALID_CITATIONS', 'An insufficient-evidence answer cannot include citations.', 422);
+  if (answerStatus !== 'answered' && labels.size > 0) {
+    throw new ApiError('INVALID_CITATIONS', 'A non-evidence answer cannot include citations.', 422);
   }
 }

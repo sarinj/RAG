@@ -36,7 +36,7 @@ Entities live inside the owning module; migration ordering is centralized. Prefe
 ## BE-01 — Bootstrap, public contract, schema
 
 1. Scaffold NestJS, validation, configuration, error envelope, request IDs, and health endpoints.
-2. Implement DTO schemas from v1; publish `backend/openapi.json` version 1.0.0. Include all error/202 variants so frontend generation does not guess them.
+2. Implement DTO schemas from v1; publish `backend/openapi.json` version 1.1.0. Include all error/202 variants so frontend generation does not guess them.
 3. Add TypeORM entities and migrations for the exact shared table/column names. Disable synchronize.
 4. Create pgvector extension, verified vector dimension, FKs, state checks, uniqueness/indexes, and document-to-active-generation ownership constraint.
 5. Validate shared index configuration against the migrated embedding dimension at readiness.

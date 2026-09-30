@@ -5,15 +5,15 @@ import re
 from collections.abc import Sequence
 from typing import cast
 
+from rag_app.generation.intents import small_talk_answer
 from rag_app.models import CONTRACT_VERSION, ChatRequest, ChatResponse, Citation, EvidenceRecord
 
 INSUFFICIENT_EVIDENCE_ANSWER = (
-    "I don’t have enough information in the selected documents to answer that."
+    "I couldn’t find enough relevant information in the selected documents. "
+    "Try asking about a topic they cover, or choose another document set."
 )
 _CITATION_MARKER = re.compile(r"\[S([0-9]+)\]")
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", flags=re.IGNORECASE | re.DOTALL)
-
-
 def parse_answer(
     raw_answer: str,
     request: ChatRequest,
@@ -77,3 +77,37 @@ def insufficient_evidence_response(request: ChatRequest) -> ChatResponse:
         answer_status="insufficient_evidence",
         citations=[],
     )
+
+
+def small_talk_response(request: ChatRequest) -> ChatResponse | None:
+    answer = small_talk_answer(request.question)
+    if answer is None:
+        return None
+    return ChatResponse(
+        contract_version=CONTRACT_VERSION,
+        request_id=request.request_id,
+        answer=answer,
+        answer_status="direct_answer",
+        citations=[],
+    )
+
+
+def document_catalog_response(request: ChatRequest, document_names: Sequence[str]) -> ChatResponse:
+    if document_names:
+        listed_names = "\n".join(f"- {_safe_markdown_name(name)}" for name in document_names)
+        answer = f"I can access these documents in this chat:\n\n{listed_names}"
+    else:
+        answer = "There are no ready documents in this chat’s scope."
+    return ChatResponse(
+        contract_version=CONTRACT_VERSION,
+        request_id=request.request_id,
+        answer=answer,
+        answer_status="direct_answer",
+        citations=[],
+    )
+
+
+def _safe_markdown_name(name: str) -> str:
+    normalized = " ".join(name.replace("\r", " ").replace("\n", " ").split())
+    normalized = normalized.replace("[", "［").replace("]", "］")
+    return re.sub(r"([\\`*_{}()#+.!|>\-])", r"\\\1", normalized)

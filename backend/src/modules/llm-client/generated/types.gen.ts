@@ -45,7 +45,7 @@ export type ChatResponse = {
     /**
      * Answerstatus
      */
-    answerStatus: 'answered' | 'insufficient_evidence';
+    answerStatus: 'answered' | 'insufficient_evidence' | 'direct_answer';
     /**
      * Citations
      */
@@ -53,7 +53,7 @@ export type ChatResponse = {
     /**
      * Contractversion
      */
-    contractVersion: '1.0.0';
+    contractVersion: '1.1.0';
     /**
      * Requestid
      */
@@ -117,6 +117,21 @@ export type ErrorEnvelope = {
 };
 
 /**
+ * EvaluationChatResponse
+ */
+export type EvaluationChatResponse = {
+    /**
+     * Rerankedcandidates
+     */
+    rerankedCandidates: Array<RetrievedCandidate>;
+    response: ChatResponse;
+    /**
+     * Retrievalcandidates
+     */
+    retrievalCandidates: Array<RetrievedCandidate>;
+};
+
+/**
  * HealthResponse
  */
 export type HealthResponse = {
@@ -138,6 +153,24 @@ export type HistoryMessage = {
      * Role
      */
     role: 'user' | 'assistant';
+};
+
+/**
+ * RetrievedCandidate
+ */
+export type RetrievedCandidate = {
+    /**
+     * Chunkid
+     */
+    chunkId: string;
+    /**
+     * Sourceend
+     */
+    sourceEnd: number;
+    /**
+     * Sourcestart
+     */
+    sourceStart: number;
 };
 
 /**
@@ -243,3 +276,52 @@ export type ChatInternalChatPostResponses = {
 };
 
 export type ChatInternalChatPostResponse = ChatInternalChatPostResponses[keyof ChatInternalChatPostResponses];
+
+export type EvaluationChatInternalEvaluationChatPostData = {
+    body: ChatRequest;
+    path?: never;
+    query?: never;
+    url: '/internal/evaluation/chat';
+};
+
+export type EvaluationChatInternalEvaluationChatPostErrors = {
+    /**
+     * Invalid request or retrieval mode
+     */
+    400: ErrorEnvelope;
+    /**
+     * Missing or invalid internal token
+     */
+    401: ErrorEnvelope;
+    /**
+     * Source snapshot changed
+     */
+    409: ErrorEnvelope;
+    /**
+     * Citation is outside retrieved evidence
+     */
+    422: ErrorEnvelope;
+    /**
+     * Executor response violated the internal contract
+     */
+    502: ErrorEnvelope;
+    /**
+     * Service or model is unavailable
+     */
+    503: ErrorEnvelope;
+    /**
+     * Generation deadline exceeded
+     */
+    504: ErrorEnvelope;
+};
+
+export type EvaluationChatInternalEvaluationChatPostError = EvaluationChatInternalEvaluationChatPostErrors[keyof EvaluationChatInternalEvaluationChatPostErrors];
+
+export type EvaluationChatInternalEvaluationChatPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: EvaluationChatResponse;
+};
+
+export type EvaluationChatInternalEvaluationChatPostResponse = EvaluationChatInternalEvaluationChatPostResponses[keyof EvaluationChatInternalEvaluationChatPostResponses];

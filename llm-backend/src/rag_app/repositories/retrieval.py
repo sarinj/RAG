@@ -42,6 +42,31 @@ class RetrievalRepository:
             count = await session.scalar(statement)
         return count == len(sources)
 
+    async def list_accessible_document_names(
+        self,
+        sources: list[SourceGeneration],
+    ) -> list[str]:
+        source_pairs = [(source.document_id, source.generation_id) for source in sources]
+        statement = (
+            select(Document.name)
+            .select_from(Document)
+            .join(
+                IndexGeneration,
+                (IndexGeneration.document_id == Document.id)
+                & (IndexGeneration.id == Document.active_generation_id),
+            )
+            .where(
+                tuple_(Document.id, IndexGeneration.id).in_(source_pairs),
+                Document.status == "ready",
+                Document.deleted_at.is_(None),
+                IndexGeneration.status == "ready",
+            )
+            .order_by(func.lower(Document.name), Document.id)
+        )
+        async with self._session() as session:
+            rows = await self._fetchall(session, statement)
+        return [str(row[0]) for row in rows]
+
     async def retrieve(
         self,
         sources: list[SourceGeneration],

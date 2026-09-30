@@ -33,7 +33,7 @@ async function bootstrap(): Promise<void> {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Learning RAG Product API')
     .setDescription('Public API for document ingestion, saved conversations, and cited answers.')
-    .setVersion('1.0.0')
+    .setVersion('1.1.0')
     .build();
   const openapi = addContractErrors(SwaggerModule.createDocument(app, swaggerConfig));
   SwaggerModule.setup('/docs', app, openapi, { jsonDocumentUrl: '/openapi.json' });

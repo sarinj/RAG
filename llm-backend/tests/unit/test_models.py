@@ -15,7 +15,7 @@ REQUEST_ID = UUID("44444444-4444-4444-8444-444444444444")
 
 def valid_chat_request(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "contractVersion": "1.0.0",
+        "contractVersion": "1.1.0",
         "requestId": str(REQUEST_ID),
         "question": "What does the report say?",
         "history": [
@@ -80,7 +80,7 @@ def test_chat_response_requires_citation_markers_to_match_evidence() -> None:
     }
     response = ChatResponse.model_validate(
         {
-            "contractVersion": "1.0.0",
+            "contractVersion": "1.1.0",
             "requestId": str(REQUEST_ID),
             "answer": "The report describes retrieval [S1].",
             "answerStatus": "answered",
@@ -94,7 +94,7 @@ def test_chat_response_requires_citation_markers_to_match_evidence() -> None:
     with pytest.raises(ValidationError):
         ChatResponse.model_validate(
             {
-                "contractVersion": "1.0.0",
+                "contractVersion": "1.1.0",
                 "requestId": str(REQUEST_ID),
                 "answer": "No matching source [S0].",
                 "answerStatus": "insufficient_evidence",
@@ -107,7 +107,7 @@ def test_insufficient_evidence_must_not_include_citations() -> None:
     with pytest.raises(ValidationError):
         ChatResponse.model_validate(
             {
-                "contractVersion": "1.0.0",
+                "contractVersion": "1.1.0",
                 "requestId": str(REQUEST_ID),
                 "answer": "This is supported [S1].",
                 "answerStatus": "insufficient_evidence",

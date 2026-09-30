@@ -9,7 +9,13 @@ from tokenizers import Tokenizer
 from rag_app.api.chat import ChatExecutionResult
 from rag_app.config import IndexConfiguration
 from rag_app.errors import ProviderProtocolError, ServiceError
-from rag_app.generation.answers import insufficient_evidence_response, parse_answer
+from rag_app.generation.answers import (
+    document_catalog_response,
+    insufficient_evidence_response,
+    parse_answer,
+    small_talk_response,
+)
+from rag_app.generation.intents import ChatIntent, classify_intent
 from rag_app.generation.prompts import ChatPromptBuilder
 from rag_app.generation.query_rewriting import rewrite_query
 from rag_app.generation.reranking import rerank_candidates
@@ -21,7 +27,6 @@ from rag_app.repositories.retrieval import RetrievalRepository, evidence_key
 from rag_app.retrieval.hybrid import bm25_candidates, reciprocal_rank_fusion
 
 REPAIR_PROMPT_TOKEN_RESERVE = 128
-REPAIR_MAX_OUTPUT_TOKENS = 64
 
 
 class ChatGraphState(TypedDict):
@@ -89,6 +94,22 @@ class BaselineChatExecutor:
         self._graph: Any = graph.compile()
 
     async def answer(self, request: ChatRequest) -> ChatExecutionResult:
+        intent = classify_intent(request.question)
+        if intent is ChatIntent.SMALL_TALK:
+            conversational_response = small_talk_response(request)
+            if conversational_response is None:
+                raise RuntimeError("Small-talk intent has no direct response")
+            return ChatExecutionResult(
+                response=conversational_response,
+                evidence_ids=frozenset(),
+            )
+        if intent is ChatIntent.DOCUMENT_CATALOG:
+            document_names = await self._retrieval.list_accessible_document_names(request.sources)
+            return ChatExecutionResult(
+                response=document_catalog_response(request, document_names),
+                evidence_ids=frozenset(),
+            )
+
         initial_state: ChatGraphState = {
             "request": request,
             "history": [],
@@ -217,7 +238,7 @@ class BaselineChatExecutor:
         repair_prompt = (
             f"{state['prompt']}\n\n"
             'REPAIR: Return only a JSON object with exactly one string field named "answer". '
-            "The answer must be one short sentence, no more than 30 words, grounded in the "
+            "Answer the original question at an appropriate level of detail, grounded in the "
             "evidence above, and use only exact citation markers from the allowed labels. If "
             "the evidence cannot answer the question, return "
             '{"answer":"INSUFFICIENT_EVIDENCE"}. '
@@ -232,7 +253,7 @@ class BaselineChatExecutor:
             GenerationInput(
                 prompt=repair_prompt,
                 context_window_tokens=self._config.context_window_tokens,
-                max_output_tokens=min(self._config.max_output_tokens, REPAIR_MAX_OUTPUT_TOKENS),
+                max_output_tokens=self._config.max_output_tokens,
                 temperature=0,
                 think=False,
                 response_format="json",
@@ -240,11 +261,7 @@ class BaselineChatExecutor:
         )
         parsed = parse_answer(generation.response, request, selected)
         if parsed is None:
-            raise ServiceError(
-                422,
-                "INVALID_CITATIONS",
-                "The generated answer did not contain valid source citations.",
-            )
+            return {"response": insufficient_evidence_response(request)}
         return {"response": parsed}
 
     @staticmethod

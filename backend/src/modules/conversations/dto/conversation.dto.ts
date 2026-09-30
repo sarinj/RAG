@@ -32,7 +32,7 @@ export class MessageDto {
   @ApiProperty({ enum: ['user', 'assistant'] }) role!: string;
   @ApiProperty({ enum: ['pending', 'completed', 'failed'] }) status!: string;
   @ApiProperty() content!: string;
-  @ApiProperty({ enum: ['answered', 'insufficient_evidence'], nullable: true }) answerStatus!: string | null;
+  @ApiProperty({ enum: ['answered', 'insufficient_evidence', 'direct_answer'], nullable: true }) answerStatus!: string | null;
   @ApiProperty({ type: [CitationDto] }) citations!: CitationDto[];
   @ApiProperty({ type: ApiFailureDto, nullable: true }) error!: ApiFailureDto | null;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;

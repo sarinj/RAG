@@ -11,6 +11,8 @@ import { MessageEntity } from '../modules/conversations/entities/message.entity'
 import { MessageCitationEntity } from '../modules/conversations/entities/message-citation.entity';
 import { DocumentEntity } from '../modules/documents/entities/document.entity';
 import { InitialSchema1710000000000 } from './migrations/1710000000000-InitialSchema';
+import { SmallTalkAnswerStatus1710000001000 } from './migrations/1710000001000-SmallTalkAnswerStatus';
+import { DirectAnswerStatus1710000002000 } from './migrations/1710000002000-DirectAnswerStatus';
 
 export function createDataSourceOptions(): DataSourceOptions {
   const config = parseServerConfig();
@@ -28,7 +30,11 @@ export function createDataSourceOptions(): DataSourceOptions {
       MessageEntity,
       MessageCitationEntity,
     ],
-    migrations: [InitialSchema1710000000000],
+    migrations: [
+      InitialSchema1710000000000,
+      SmallTalkAnswerStatus1710000001000,
+      DirectAnswerStatus1710000002000,
+    ],
     migrationsTableName: 'typeorm_migrations',
     migrationsRun: false,
     synchronize: false,

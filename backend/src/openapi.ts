@@ -11,12 +11,12 @@ async function main(): Promise<void> {
   const options = new DocumentBuilder()
     .setTitle('Learning RAG Product API')
     .setDescription('Public API for document ingestion, saved conversations, and cited answers.')
-    .setVersion('1.0.0')
+    .setVersion('1.1.0')
     .build();
   const document = addContractErrors(SwaggerModule.createDocument(app, options));
   await writeFile(resolve(process.cwd(), 'openapi.json'), `${JSON.stringify(document, null, 2)}\n`, 'utf8');
   await app.close();
-  process.stdout.write('Wrote backend/openapi.json (OpenAPI 1.0.0).\n');
+  process.stdout.write('Wrote backend/openapi.json (OpenAPI 1.1.0).\n');
 }
 
 main().catch((error: unknown) => {

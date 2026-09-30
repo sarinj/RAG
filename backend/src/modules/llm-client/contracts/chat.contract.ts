@@ -16,13 +16,13 @@ export const InternalCitationSchema = z.object({
 );
 
 export const InternalChatResponseSchema = z.object({
-  contractVersion: z.literal('1.0.0'),
+  contractVersion: z.literal('1.1.0'),
   requestId: z.string().uuid(),
   answer: z.string(),
-  answerStatus: z.enum(['answered', 'insufficient_evidence']),
+  answerStatus: z.enum(['answered', 'insufficient_evidence', 'direct_answer']),
   citations: z.array(InternalCitationSchema),
 }).strict();
 
 export type InternalCitation = Citation;
 export type InternalChatResponse = ChatResponse;
-export type InternalChatRequest = Omit<ChatRequest, 'contractVersion'> & { contractVersion: '1.0.0' };
+export type InternalChatRequest = Omit<ChatRequest, 'contractVersion'> & { contractVersion: '1.1.0' };

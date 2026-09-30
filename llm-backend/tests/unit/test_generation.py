@@ -11,7 +11,7 @@ def test_answer_parser_accepts_only_cited_json_answer() -> None:
     request_id = uuid4()
     request = ChatRequest.model_validate(
         {
-            "contractVersion": "1.0.0",
+            "contractVersion": "1.1.0",
             "requestId": str(request_id),
             "question": "Who leads Project Orion?",
             "history": [],

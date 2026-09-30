@@ -385,7 +385,7 @@ async def _evaluate_case(
     retrieval_mode: str,
 ) -> dict[str, Any]:
     payload = {
-        "contractVersion": "1.0.0",
+        "contractVersion": "1.1.0",
         "requestId": str(uuid4()),
         "question": case.question,
         "history": list(case.history),

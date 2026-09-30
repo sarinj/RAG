@@ -74,7 +74,7 @@ test('chunk capacity matches the fixed v1 contract limit', () => {
 
 test('internal responses enforce the v1 citation and answer shape', () => {
   const response = {
-    contractVersion: '1.0.0',
+    contractVersion: '1.1.0',
     requestId: uuidA,
     answer: 'Text [S1].',
     answerStatus: 'answered',

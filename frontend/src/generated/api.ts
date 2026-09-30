@@ -277,7 +277,7 @@ export interface components {
             status: "pending" | "completed" | "failed";
             content: string;
             /** @enum {string|null} */
-            answerStatus: "answered" | "insufficient_evidence" | null;
+            answerStatus: "answered" | "insufficient_evidence" | "direct_answer" | null;
             citations: components["schemas"]["CitationDto"][];
             error: components["schemas"]["ApiFailureDto"] | null;
             /** Format: date-time */
@@ -356,80 +356,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description NOT_FOUND */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -472,26 +400,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description NOT_FOUND */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description An active document with this content already exists. */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -517,15 +427,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
                 headers: {
@@ -537,15 +438,6 @@ export interface operations {
             };
             /** @description Index configuration is unavailable. */
             503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -592,71 +484,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -701,71 +530,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -825,62 +591,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -940,42 +652,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
                 headers: {
@@ -987,15 +663,6 @@ export interface operations {
             };
             /** @description Index configuration is unavailable. */
             503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1043,15 +710,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description The source document has been deleted. */
             410: {
                 headers: {
@@ -1061,53 +719,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1146,80 +759,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description NOT_FOUND */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1277,62 +818,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1379,71 +866,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1493,71 +917,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description INTERNAL_ERROR */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1627,33 +988,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
             /** @description Context limit or citation validation failed. */
             422: {
                 headers: {
@@ -1708,98 +1042,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        status?: "ok";
+                        status: "ok";
                     };
-                };
-            };
-            /** @description VALIDATION_ERROR */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description NOT_FOUND */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description INTERNAL_ERROR */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description MODEL_UNAVAILABLE */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };
@@ -1820,93 +1064,12 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        status?: "ready";
+                        status: "ready";
                     };
-                };
-            };
-            /** @description VALIDATION_ERROR */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description NOT_FOUND */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description DUPLICATE_DOCUMENT, INVALID_STATE, NO_READY_DOCUMENTS, DOCUMENT_NOT_READY, REQUEST_ID_CONFLICT, TURN_IN_PROGRESS, SCOPE_CHANGED, INDEX_CONFIG_MISMATCH */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description SOURCE_DELETED */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description FILE_TOO_LARGE, CORPUS_LIMIT_EXCEEDED */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description UNSUPPORTED_FILE_TYPE */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description EMPTY_DOCUMENT, CONTEXT_LIMIT_EXCEEDED, INVALID_CITATIONS */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description INTERNAL_ERROR */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
             /** @description One or more backend dependencies are not ready. */
             503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorEnvelope"];
-                };
-            };
-            /** @description GENERATION_TIMEOUT */
-            504: {
                 headers: {
                     [name: string]: unknown;
                 };
