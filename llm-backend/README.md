@@ -27,7 +27,11 @@ If the shortening retry remains too long, a complete source statement matching t
 
 Intent, ambiguous route, scope, and length decisions use the LLM's validated JSON plan. High-confidence multilingual exhaustive-request signals enforce complete corpus routes. The same planning call resolves follow-up topics, independent subquestions and optional query variants. Revisions retain the underlying retrieval strategy: shortening a focused answer uses local search, while shortening a document summary still processes the complete document. Failed replies supply no answer context for presentation requests; user questions remain available so an explicitly named new subject is preserved. A revision of an unanswered factual question preserves the lack of evidence instead of reverting to an older topic. New factual questions generate from the resolved query and current sources without repeating old answers in their prompt. Verbatim definition recovery requires the planner's definition-subject preference and local evidence. When the LLM identifies shortening, the word limit is also capped below the previous supported answer's measured length. Factual drafts returned during planning are discarded; document answers require fresh scoped evidence. Invalid or unresolved plans get one bounded planning retry, then fall back to document QA with bounded recent context and deterministic exhaustive routing.
 
-Evidence coverage is checked before generation. Complete evidence supports a normal answer; partial evidence supports a cited answer plus a missing-information note; insufficient evidence stops generation. By default, generated claims must name selected chunk IDs and pass a bounded support check against original text before citation rendering. One answer repair remains available. Structured `rag_trace` JSON events record scope, stage candidates/scores/ranks, fallback policies and timings, with text omitted by default. Query variants and neighbors are optional and off by default; retrieval depths retain the existing 30/30/30/5 baseline. See [RAG correctness and debugging](../docs/implementation/rag-correctness.md) for every setting, architecture/risk findings, evaluation commands and the debugging decision tree.
+Evidence coverage is checked before generation. Complete evidence supports a normal answer; partial evidence supports a cited answer with a reconciled missing-aspect note; insufficient evidence stops generation. By default, generated claims name short selected-source labels, which application code resolves to original chunk UUIDs before scope, support and citation validation. Legacy UUID drafts remain readable. One answer repair remains available. Structured `rag_trace` JSON events record scope, stage candidates/scores/ranks, fallback policies and timings, with text omitted by default. Query variants and neighbors are optional and off by default; retrieval depths retain the existing 30/30/30/5 baseline. See [RAG correctness and debugging](../docs/implementation/rag-correctness.md) for every setting, architecture/risk findings, evaluation commands and the debugging decision tree.
+
+The sufficiency provider returns a coverage enum and missing aspects; application code derives
+the `answerable` boolean. Sufficiency and claim checks receive explicit JSON schemas. Invalid
+outputs remain rejected, and traces include schema error types/locations without source text.
 
 ## Setup
 
@@ -128,7 +132,53 @@ docker compose run --rm --no-deps \
 
 The runner writes JSON and Markdown reports under `llm-backend/evals/reports/`. Run `--dataset pipeline_v2` for the benchmark, `--limit 3` for a short run, and `--keep-documents` to retain a corpus uploaded during that run. Reports include answer token F1, abstention accuracy, citation presence, latency, candidate Recall@30, reranked Recall@5, and citation-evidence precision/recall. They record selected provider/model IDs, shared index settings, and dataset hashes. These are overlap and lexical metrics, not proof of semantic correctness; review answers and citations before drawing quality conclusions.
 
+Reports distinguish request/metric errors from false abstentions on answerable questions.
+An insufficient-evidence reply gets zero answer token F1; boilerplate keyword overlap does
+not count as an answer. Answerable answer rate measures response coverage, not semantic accuracy.
+
 To evaluate an already-indexed benchmark corpus instead of uploading a temporary corpus, pass `--source pipeline_v2=<document-uuid>`.
+
+### Optional RAGAS evaluation
+
+RAGAS scores frozen answers against the **exact selected original chunks**. It supplements
+the deterministic stage metrics; it does not change retrieval or production chat. Its
+dependencies belong to the optional `eval` group and are excluded from the production image.
+
+Keep a live benchmark's documents with `rag-eval --dataset pipeline_v2 --keep-documents`,
+then run from the repository root:
+
+```bash
+docker compose run --rm --no-deps \
+  -v "$PWD/llm-backend/evals/reports:/app/evals/reports" \
+  llm-backend uv run --locked --no-default-groups --group eval rag-eval \
+  --ragas-report /app/evals/reports/rag-eval-YYYYMMDDTHHMMSSZ.json \
+  --ragas-judge-model gpt-5-mini
+```
+
+The defaults are [faithfulness](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/),
+[answer accuracy](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/nvidia_metrics/),
+[answer relevancy](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/answer_relevance/),
+[context precision](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_precision/)
+and [context recall](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/context_recall/).
+Choose a subset with `--ragas-metrics`. Optional `factual_correctness` is also available,
+but short reference fragments can confuse that metric because its comparison omits the
+question. An independent judge is recommended; `--ragas-judge-model` does not change the
+application model. This adapter requires configured OpenAI generation credentials and,
+for answer relevancy, OpenAI embedding credentials.
+
+Calls use `--ragas-max-tokens 2048`, `--ragas-concurrency 2` and one provider retry.
+Use `--limit` for a small trial. Failed metrics are reported and make the command exit
+nonzero. False abstentions get zero answer accuracy/relevancy and no faithfulness score;
+faithfulness is conditional on returned answers. Unanswerable cases report abstention
+separately instead of rewarding an empty response with a perfect score.
+
+The command exports `ragas-*-inputs.jsonl`, which deliberately contains selected source
+text and frozen answers. These files stay in the ignored reports directory. Re-score
+with `--ragas-inputs <inputs.jsonl>` without needing the original database generation.
+For older reports lacking selected stage IDs, supply `--ragas-trace-file` from exactly
+that run. Never substitute retrieved or reranked candidates for the contexts actually
+given to the answer model. LLM judges can make mistakes; review per-case results alongside
+answers, citations and deterministic retrieval metrics.
 
 `rag-probe` exercises the selected generation and embedding adapters with sample requests. For Ollama it also reports model digests and context metadata; hosted embedding providers report the configured embedding fingerprint. It does not select a tokenizer or write the reviewed index config. Ollama's local model list, generation, embedding, and model-info endpoints are documented in its [API reference](https://docs.ollama.com/api).
 

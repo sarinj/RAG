@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from typing import Any, cast
 
 import httpx
@@ -18,6 +19,31 @@ from rag_app.providers.models import (
     GenerationInput,
     GenerationOutput,
 )
+
+
+def strict_response_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Adapt Pydantic defaults to OpenAI's strict subset; validate locally as well."""
+    result = deepcopy(schema)
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            node = cast(dict[str, Any], value)
+            node.pop("default", None)
+            # UUID format is not in the API's supported string formats. The local
+            # Pydantic model still validates UUIDs and authorized evidence membership.
+            if node.get("format") == "uuid":
+                node.pop("format")
+            if "properties" in node:
+                node["required"] = list(node["properties"])
+                node["additionalProperties"] = False
+            for child in node.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in cast(list[Any], value):
+                visit(child)
+
+    visit(result)
+    return result
 
 
 class OpenAIProvider:
@@ -92,9 +118,7 @@ class OpenAIProvider:
 
         configured_digest = self._settings.embedding_model_digest
         if not configured_digest:
-            raise ProviderProtocolError(
-                "EMBEDDING_MODEL_DIGEST must pin OpenAI's embedding model"
-            )
+            raise ProviderProtocolError("EMBEDDING_MODEL_DIGEST must pin OpenAI's embedding model")
         if configured_digest.lower() != config.embedding_digest.lower():
             raise ProviderProtocolError(
                 "Embedding model digest differs from the reviewed index config"
@@ -121,11 +145,24 @@ class OpenAIProvider:
             "max_completion_tokens": request.max_output_tokens,
             "stream": False,
         }
-        if model.startswith("gpt-5-nano"):
+        if request.reasoning_effort is not None and model.startswith(("gpt-5", "o3", "o4")):
+            body["reasoning_effort"] = request.reasoning_effort
+            if request.reasoning_effort != "minimal":
+                body["max_completion_tokens"] += request.reasoning_token_budget
+        elif model.startswith("gpt-5-nano"):
             body["reasoning_effort"] = "minimal"
         elif request.temperature is not None and not model.startswith("gpt-5"):
             body["temperature"] = request.temperature
-        if request.response_format == "json":
+        if request.response_schema is not None:
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "rag_response",
+                    "strict": True,
+                    "schema": strict_response_schema(request.response_schema),
+                },
+            }
+        elif request.response_format == "json":
             body["response_format"] = {"type": "json_object"}
 
         timeout = httpx.Timeout(
@@ -149,8 +186,15 @@ class OpenAIProvider:
             message = first_choice["message"]
             if not isinstance(message, dict) or not isinstance(message.get("content"), str):
                 raise ValueError("completion response has no text content")
+            message = cast(dict[str, Any], message)
             usage = payload.get("usage", {})
-            usage = usage if isinstance(usage, dict) else {}
+            usage = cast(dict[str, Any], usage) if isinstance(usage, dict) else {}
+            completion_details = usage.get("completion_tokens_details", {})
+            completion_details = (
+                cast(dict[str, Any], completion_details)
+                if isinstance(completion_details, dict)
+                else {}
+            )
             return GenerationOutput(
                 model=payload.get("model", model),
                 response=message["content"],
@@ -158,11 +202,10 @@ class OpenAIProvider:
                 done_reason=first_choice.get("finish_reason"),
                 prompt_eval_count=usage.get("prompt_tokens"),
                 eval_count=usage.get("completion_tokens"),
+                reasoning_tokens=completion_details.get("reasoning_tokens"),
             )
         except Exception as exc:
-            raise ProviderProtocolError(
-                "OpenAI returned an invalid generation response"
-            ) from exc
+            raise ProviderProtocolError("OpenAI returned an invalid generation response") from exc
 
     async def embed(self, request: EmbeddingInput) -> EmbeddingOutput:
         model = self._settings.embedding_model
@@ -209,9 +252,7 @@ class OpenAIProvider:
                 dimension=len(vectors[0]),
             )
         except Exception as exc:
-            raise ProviderProtocolError(
-                "OpenAI returned invalid embeddings"
-            ) from exc
+            raise ProviderProtocolError("OpenAI returned invalid embeddings") from exc
 
     async def _list_models(self) -> set[str]:
         payload = await self._request("GET", "models")
@@ -228,9 +269,7 @@ class OpenAIProvider:
                 raise ValueError("model list contains invalid entries")
             return model_names
         except Exception as exc:
-            raise ProviderProtocolError(
-                "OpenAI returned an invalid model list"
-            ) from exc
+            raise ProviderProtocolError("OpenAI returned an invalid model list") from exc
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         try:
@@ -240,15 +279,11 @@ class OpenAIProvider:
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict):
-                raise ProviderProtocolError(
-                    "OpenAI returned an invalid response"
-                )
+                raise ProviderProtocolError("OpenAI returned an invalid response")
             return cast(dict[str, Any], payload)
         except ProviderError:
             raise
         except httpx.TimeoutException as exc:
             raise ProviderTimeout("OpenAI request timed out") from exc
         except (httpx.HTTPError, ValueError) as exc:
-            raise ProviderError(
-                "OpenAI is unavailable or returned an invalid response"
-            ) from exc
+            raise ProviderError("OpenAI is unavailable or returned an invalid response") from exc

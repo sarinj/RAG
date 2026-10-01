@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, model_validator
 
@@ -15,6 +15,9 @@ class GenerationInput(BaseModel):
     temperature: float | None = Field(default=None, ge=0, le=2)
     think: StrictBool | None = None
     response_format: Literal["json"] | None = None
+    response_schema: dict[str, Any] | None = None
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
+    reasoning_token_budget: StrictInt = Field(default=0, ge=0, le=4096)
 
 
 class GenerationOutput(BaseModel):
@@ -30,6 +33,7 @@ class GenerationOutput(BaseModel):
     prompt_eval_duration: int | None = None
     eval_count: int | None = None
     eval_duration: int | None = None
+    reasoning_tokens: int | None = None
 
 
 class EmbeddingInput(BaseModel):

@@ -480,7 +480,8 @@ async def test_non_factual_intents_bypass_retrieval(monkeypatch, intent: str) ->
     )
     executor, request, retrieval = execute_with(monkeypatch, corpus, provider)
 
-    result = await executor.answer(request)
+    question = "Hello!" if intent == "conversation" else "Which selected documents are available?"
+    result = await executor.answer(request.model_copy(update={"question": question}))
 
     assert result.response.answer_status == "direct_answer"
     assert result.diagnostics.route is None
@@ -616,6 +617,31 @@ async def test_truncated_final_list_is_rejected(monkeypatch) -> None:
 
     with pytest.raises(ServiceError, match="complete list or aggregation"):
         await executor.answer(request)
+
+
+@pytest.mark.parametrize("reasoning_tokens,exceeds_limit", [(100, True), (300, False)])
+async def test_final_list_enforces_visible_output_budget(
+    monkeypatch, reasoning_tokens: int, exceeds_limit: bool
+) -> None:
+    class OutputUsageProvider(RoutingProvider):
+        async def generate(self, request: GenerationInput) -> GenerationOutput:
+            output = await super().generate(request)
+            if '"answer"' in output.response:
+                return output.model_copy(
+                    update={"eval_count": 700, "reasoning_tokens": reasoning_tokens}
+                )
+            return output
+
+    corpus = corpus_for(["Orion", "Echo"])
+    provider = OutputUsageProvider(plan_for(QueryRoute.AGGREGATION_LIST), answer_reason="stop")
+    executor, request, _retrieval = execute_with(monkeypatch, corpus, provider)
+
+    if exceeds_limit:
+        with pytest.raises(ServiceError, match="complete list or aggregation"):
+            await executor.answer(request)
+    else:
+        result = await executor.answer(request)
+        assert result.response.answer_status == "answered"
 
 
 def test_factual_plan_discards_direct_answer_and_keeps_route_independent() -> None:

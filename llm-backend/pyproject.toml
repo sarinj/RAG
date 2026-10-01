@@ -26,6 +26,11 @@ dev = [
     "respx>=0.21,<1",
     "ruff>=0.9,<1",
 ]
+eval = [
+    "langchain-community>=0.3,<0.4",
+    "openai>=2,<3",
+    "ragas>=0.4,<0.5",
+]
 
 [project.scripts]
 rag-probe = "rag_app.probe:main"

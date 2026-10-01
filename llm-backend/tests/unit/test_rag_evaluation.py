@@ -3,14 +3,17 @@ from __future__ import annotations
 import argparse
 import json
 
+import httpx
 import pytest
 
+from rag_app.evals.datasets import EvaluationCase
 from rag_app.evals.retrieval import (
     failure_hint,
     load_cases,
     ranking_metrics,
     run_retrieval_evaluation,
 )
+from rag_app.evals.runner import _evaluate_case, _summarize
 
 
 def test_retrieval_metrics_measure_recall_mrr_ndcg_without_duplicate_credit() -> None:
@@ -66,3 +69,63 @@ async def test_offline_failure_dataset_runs_without_services(tmp_path) -> None:
     assert report["metrics"]["stages"]["selected"]["source_coverage"] == 0
     assert report["metrics"]["stages"]["vector"]["measured_cases"] == 0
     assert load_cases(tmp_path / "saved.jsonl")[0].failure_category == "reranker"
+
+
+def test_benchmark_counts_false_abstentions_separately_from_request_failures() -> None:
+    cases = [
+        {
+            "expectedAnswer": "two years",
+            "answerStatus": "insufficient_evidence",
+            "answerTokenF1": 0.0,
+            "latencyMs": 10,
+            "citationCount": 0,
+            "error": None,
+            "retrieval": None,
+        },
+        {
+            "expectedAnswer": None,
+            "answerStatus": "insufficient_evidence",
+            "answerTokenF1": None,
+            "correctAbstention": True,
+            "latencyMs": 10,
+            "citationCount": 0,
+            "error": None,
+            "retrieval": None,
+        },
+    ]
+    metrics = _summarize(cases)
+    assert metrics["failedCases"] == 0
+    assert metrics["answerableFalseAbstentions"] == 1
+    assert metrics["answerableFalseAbstentionRate"] == 1
+    assert metrics["answerableAnswerRate"] == 0
+    assert metrics["unanswerableAbstentionAccuracy"] == 1
+
+
+async def test_benchmark_abstention_does_not_get_keyword_overlap_credit() -> None:
+    payload = {
+        "response": {
+            "answer": "I could not find relevant warranty years in the selected documents.",
+            "answerStatus": "insufficient_evidence",
+            "citations": [],
+        },
+        "retrievalCandidates": [],
+        "rerankedCandidates": [],
+    }
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    async with httpx.AsyncClient(base_url="http://llm.test", transport=transport) as client:
+        result = await _evaluate_case(
+            client,
+            {},
+            {"id": "doc", "activeGenerationId": "gen"},
+            EvaluationCase(
+                case_id="warranty",
+                category="direct",
+                question="Warranty period?",
+                expected_answer="two years warranty",
+                history=(),
+                evidence_spans=(),
+            ),
+            retrieval_mode="hybrid",
+        )
+    assert result["error"] is None
+    assert result["answerTokenF1"] == 0

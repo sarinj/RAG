@@ -105,3 +105,70 @@ def exhaustive_route(question: str) -> QueryRoute | None:
     if any(re.search(pattern, text) for pattern in _LIST_SIGNALS):
         return QueryRoute.AGGREGATION_LIST
     return None
+
+
+_SOCIAL_MESSAGES = re.compile(
+    r"^(?:hi|hello|hey|hello there|hi there|good morning|good afternoon|good evening|"
+    r"thanks|thank you|thanks a lot|thank you very much|thanks for your help|"
+    r"thank you for your help|bye|goodbye|see you|see you later|"
+    r"สวัสดี(?:ครับ|ค่ะ|คะ)?|ขอบคุณ(?:ครับ|ค่ะ|คะ|มาก)?|ลาก่อน|"
+    r"你好|您好|谢谢|謝謝|再见|再見|こんにちは|ありがとう|さようなら|"
+    r"bonjour|salut|merci|merci beaucoup|au revoir|hola|gracias|muchas gracias|adiós|"
+    r"hallo|danke|vielen dank|tschüss|ciao|grazie|arrivederci|"
+    r"안녕하세요|감사합니다|안녕|مرحبا|شكرا|مع السلامة)$"
+)
+
+
+def social_message_only(question: str) -> bool:
+    """Conservative bypass: unknown phrasing stays with scoped document QA."""
+    text = unicodedata.normalize("NFKC", question).casefold()
+    text = "".join(char for char in text if not unicodedata.category(char).startswith(("P", "S")))
+    text = " ".join(text.split())
+    return bool(_SOCIAL_MESSAGES.fullmatch(text))
+
+
+def catalog_message_only(question: str) -> bool:
+    """Direct catalog replies must concern only source availability/names, not their facts."""
+    text = unicodedata.normalize("NFKC", question).casefold()
+    text = "".join(char for char in text if not unicodedata.category(char).startswith(("P", "S")))
+    text = " ".join(text.split())
+    subjects = {
+        "documents",
+        "document",
+        "files",
+        "file",
+        "sources",
+        "source",
+        "filenames",
+        "fichiers",
+        "archivos",
+        "documentos",
+        "quellen",
+        "dateien",
+        "dokumente",
+    }
+    words = set(text.split())
+    catalog_words = subjects | set(
+        "which what are is the a all every complete list show give name names filename enumerate "
+        "selected available accessible uploaded attached in this chat conversation to me my you "
+        "your can access read see please only how many do have get tell currently "
+        "quels quelles les des sont disponibles sélectionnés sélectionnées afficher liste "
+        "qué cuáles los las están disponibles seleccionados mostrar lista "
+        "welche sind verfügbar ausgewählt auflisten alle".split()
+    )
+    return bool(words & subjects and words <= catalog_words) or text in {
+        "what can you access",
+        "what can you read",
+        "which sources can you access",
+        "มีเอกสารอะไรบ้าง",
+        "มีไฟล์อะไรบ้าง",
+        "แสดงรายการเอกสารทั้งหมด",
+        "เอกสารที่เลือกมีอะไรบ้าง",
+        "有哪些文档",
+        "列出所有文件",
+        "哪些文件可用",
+        "有哪些文件",
+        "どの文書が利用できますか",
+        "利用できるファイル一覧",
+        "quelles sources sont disponibles",
+    }

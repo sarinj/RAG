@@ -53,6 +53,11 @@ flowchart TD
 These risks came from code inspection. They are not a measured attribution of production
 failures. Use a labeled case and the trace to distinguish them before changing parameters.
 
+The subsequent [live diagnosis and RAGAS comparison](rag-live-benchmark-2026-10-01.md)
+found that all expected chunks reached selected evidence on the small fixture. Its dominant
+failures were false grounding judgments, malformed JSON, missing-aspect notes, citation
+assignment and direct routing. Retrieval depths remained fixed throughout those fixes.
+
 | Risk / previous behavior | Implemented behavior | How it helps |
 | --- | --- | --- |
 | Scores, per-query matches, fallbacks and stage timings disappeared | One structured request trace, candidate metadata and internal evaluation stages | Locates the first stage that loses expected evidence |
@@ -100,6 +105,10 @@ include these settings. They do not belong in the immutable shared indexing arti
 | `RAG_SUFFICIENCY_CHECK_ENABLED` | `true` | One bounded coverage judgment before generation |
 | `RAG_CLAIM_VALIDATION_ENABLED` | `true` | Require structured claims and validate support against originals |
 | `RAG_CLAIM_VALIDATION_MAX_BATCHES` | `8` | Maximum support batches per answer attempt, range 1–16 |
+| `RAG_GROUNDING_REASONING_EFFORT` | `low` | Per-call reasoning effort for sufficiency and claim validation |
+| `RAG_GROUNDING_MAX_OUTPUT_TOKENS` | `1024` | Total grounding completion budget, including hidden reasoning; range 128–4096 |
+| `RAG_ANSWER_REASONING_EFFORT` | `low` | Per-call reasoning effort for grounded generation and its bounded repair |
+| `RAG_ANSWER_REASONING_TOKEN_BUDGET` | `512` | Extra completion room for hidden reasoning; visible answer still obeys the indexed output cap |
 | `RAG_TRACE_ENABLED` | `true` | Emit one `rag_trace` JSON event per retrieval request, including errors |
 | `RAG_TRACE_INCLUDE_TEXT` | `false` | Include question, queries, reason, answer, source/context text and reranker excerpts |
 | `RAG_DEBUG_MODE` | `false` | Must explicitly be true before text tracing is accepted |
@@ -110,12 +119,30 @@ existing planner pass (at most two planner attempts). All local query embeddings
 provider batch and the lexical corpus is tokenized once. Dependent multi-hop stays capped
 at three rounds and uses the same authorized snapshot.
 
-Sufficiency uses at most 256 output tokens and makes one call, with no retry. Support checks
-batch at most four claims per call and use at most 512 output tokens. Oversized inputs,
+Sufficiency makes one call, with no retry. Sufficiency and support checks use the configured
+grounding completion budget (1024 by default), including hidden reasoning. Support checks
+batch at most four claims per call. Oversized inputs,
 missing verdicts, unknown IDs, invalid JSON and truncation fail validation. An answer gets
-at most one generation repair and one additional bounded support pass. A partial answer
-keeps `answerStatus=answered`, with supported citations and a deterministic note naming
-what was not found. An insufficient result keeps the existing uncited response shape.
+at most one generation repair and one additional bounded support pass. A supported partial
+answer gets one bounded coverage reconciliation against the originals and validated draft.
+Only verified missing aspects receive a specific note, scoped to the supplied evidence.
+An insufficient result keeps the existing uncited response shape.
+
+OpenAI grounding and answer calls use native JSON schemas plus local validation. JSON
+object mode alone does not guarantee schema adherence; see the official
+[Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).
+The visible answer limit remains the shared index configuration's `maxOutputTokens`.
+An added reasoning reserve also counts toward the context budget. The trace's `llm_calls`
+records schema use, requested effort, token budgets, completion/reasoning usage and finish
+reasons without document text. Literal claim validation accepts only a whole unchanged
+original passage; individual paragraphs, substrings, changed quantities and paraphrases still need semantic
+checking. Calculation validation receives the question's hypothetical inputs separately
+from factual source evidence.
+
+Generation uses short selected-source labels, constrained by its native schema. Application
+code maps them to original chunk UUIDs before authorization, claim and citation validation.
+Legacy UUID drafts remain readable. The model no longer copies long UUIDs into its answers;
+labels never authorize an additional chunk or bypass the source support check.
 
 For a retrieval baseline comparison, leave variants/neighbors off and hold all depths fixed.
 The legacy answer format and evidence-presence behavior are available by disabling the
@@ -203,7 +230,10 @@ losses; semantic failure categories still require developer review.
    retained strongest-result policy. `reranker_score` is null because this ranker returns IDs.
 5. If it survives ranking, inspect `evidence_selection` decisions: duplicate, evidence count,
    source token cap, or complete prompt cap. Inspect which neighbors were fetched and retained.
-6. Inspect complete/partial/insufficient coverage and missing-aspect count. Missing independent
+6. Inspect complete/partial/insufficient coverage and missing-aspect count. The model returns
+   coverage; application code derives `answerable` so those fields cannot disagree. For rejected
+   structured outputs, inspect `sufficiency_schema_errors` / `claim_schema_errors`: these record
+   types and sanitized field locations without model/source text. Missing independent
    aspects suggest decomposition or retrieval issues. A false sufficiency judgment is a
    separate failure category, even if some relevant chunks were selected.
 7. When final evidence covers the question, inspect claim support outcomes, invalid IDs,
@@ -253,12 +283,20 @@ Existing full-corpus, multi-hop, follow-up, schema and provider tests remain in 
 run. The legacy graph tests explicitly retain baseline flags; dedicated graph tests exercise
 the new default grounding safeguards.
 
-Final verification: 112 Python tests and 9 NestJS tests passed. Ruff formatting/lint,
+Final verification: 117 Python tests and 9 NestJS tests passed. Ruff formatting/lint,
 the NestJS build/typecheck, OpenAPI export/client generation, Compose configuration and
 `git diff --check` passed. The illustrative offline retrieval CLI produced stage metrics
 and correctly identified the saved reranker failure. Full Pyright remains nonzero with
 118 existing diagnostics in providers and evaluation code, compared with 122 at the
 pre-change baseline; no new diagnostics remain in the changed RAG modules.
+
+Live benchmark reporting also counts false abstentions and answerable answer rate separately
+from request/metric errors. Insufficient-evidence replies score zero answer token F1. The
+grounding prompts include the exact validated JSON schemas; the model's coverage enum is
+the sole sufficiency decision, with answerability derived deterministically in code.
+See the [2026-10-01 live benchmark](rag-live-benchmark-2026-10-01.md) for measured results,
+the grounding regressions it exposed and the remaining failures. Its five-chunk corpus
+does not discriminate retrieval depths, and its answer quality remains incomplete.
 
 Semantic judgments still use the configured provider and can be wrong. Extra bounded calls
 increase latency and use the existing overall deadline. Corpus limits and supported context

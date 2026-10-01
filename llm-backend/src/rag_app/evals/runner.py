@@ -30,6 +30,10 @@ REPORT_DIRECTORY = Path(__file__).resolve().parents[3] / "evals" / "reports"
 
 
 async def run_evaluation(args: argparse.Namespace) -> int:
+    if args.ragas_report or args.ragas_inputs:
+        from rag_app.evals.ragas import run_ragas_evaluation
+
+        return await run_ragas_evaluation(args)
     if args.retrieval_cases:
         return await run_retrieval_evaluation(args)
     settings = Settings()
@@ -185,6 +189,9 @@ async def run_evaluation(args: argparse.Namespace) -> int:
             "the current question's answer.",
             "Top-K retrieval metrics describe LOCAL_SEARCH. Whole-corpus and iterative "
             "routes also report their strategy, searches, and processed chunk coverage.",
+            "failedCases counts request or metric errors, not semantic failures. "
+            "False abstentions count insufficient-evidence replies to answerable questions; "
+            "these replies receive zero answer token F1.",
         ],
     }
     stamp = started_at.strftime("%Y%m%dT%H%M%SZ")
@@ -443,6 +450,7 @@ async def _evaluate_case(
         reranked_candidates = evaluation_data["rerankedCandidates"]
         return {
             "caseId": case.case_id,
+            "requestId": payload["requestId"],
             "category": case.category,
             "question": case.question,
             "history": list(case.history),
@@ -452,6 +460,8 @@ async def _evaluate_case(
             "answerTokenF1": (
                 None
                 if is_unanswerable
+                else 0.0
+                if answer_status == "insufficient_evidence"
                 else _token_f1(_remove_citations(answer), case.expected_answer or "")
             ),
             "correctAbstention": (
@@ -459,6 +469,8 @@ async def _evaluate_case(
             ),
             "citationCount": len(citations),
             "queryDiagnostics": evaluation_data.get("diagnostics"),
+            "retrievalStages": evaluation_data.get("stages"),
+            "citations": citations,
             "retrieval": (
                 _retrieval_metrics(
                     case, candidates, reranked_candidates, citations, evaluation_data.get("stages")
@@ -579,6 +591,7 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
     f1_values = [float(case["answerTokenF1"]) for case in answerable]
     latencies = [float(case["latencyMs"]) for case in cases]
     answered = [case for case in cases if case["answerStatus"] == "answered"]
+    false_abstentions = sum(case["answerStatus"] == "insufficient_evidence" for case in answerable)
     retrieval_cases = [case["retrieval"] for case in cases if case.get("retrieval") is not None]
     successful_retrieval_cases = [case for case in retrieval_cases if case.get("error") is None]
     failed_cases = sum(
@@ -603,6 +616,17 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
         "failedCases": failed_cases,
         "answerableCases": len(answerable),
         "unanswerableCases": len(unanswerable),
+        "answerableAnswerRate": (
+            round(
+                sum(case["answerStatus"] == "answered" for case in answerable) / len(answerable), 4
+            )
+            if answerable
+            else None
+        ),
+        "answerableFalseAbstentions": false_abstentions,
+        "answerableFalseAbstentionRate": (
+            round(false_abstentions / len(answerable), 4) if answerable else None
+        ),
         "retrievalAnnotatedCases": len(retrieval_cases),
         "retrievalFailedCases": sum(case.get("error") is not None for case in retrieval_cases),
         "meanRetrievedCandidateCount": _mean_metric(
@@ -698,7 +722,9 @@ def _render_console_summary(report: dict[str, Any]) -> str:
     metrics = report["metrics"]
     lines = [
         "RAG evaluation",
-        f"Cases: {metrics['totalCases']} ({metrics['failedCases']} failed)",
+        f"Cases: {metrics['totalCases']} ({metrics['failedCases']} request/metric errors)",
+        f"Answerable answer rate: {metrics['answerableAnswerRate']} · "
+        f"False abstentions: {metrics['answerableFalseAbstentions']}/{metrics['answerableCases']}",
         f"Mean answer token F1: {metrics['answerableMeanTokenF1']}",
         f"Answerable F1 >= 0.5: {metrics['answerableTokenF1AtLeast0_5']}",
         f"Unanswerable abstention accuracy: {metrics['unanswerableAbstentionAccuracy']}",
@@ -751,7 +777,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
         "## Aggregate metrics",
         "",
         (
-            "| Cases | Failed | Answerable mean token F1 | Answerable F1 ≥ 0.5 | "
+            "| Cases | Request/metric errors | Answerable mean token F1 | Answerable F1 ≥ 0.5 | "
             "Abstention accuracy | Candidate Recall@30 | Reranked Recall@5 | "
             "Citation evidence P / R | Citation rate | Mean candidates / reranked | "
             "Latency p50 / p95 ms |"
@@ -770,6 +796,11 @@ def _render_markdown(report: dict[str, Any]) -> str:
             f"{metrics['meanRerankedCandidateCount']} | "
             f"{metrics['latencyMsP50']} / {metrics['latencyMsP95']} |"
         ),
+        "",
+        f"Answerable answer rate: {metrics['answerableAnswerRate']}. "
+        f"False abstentions: {metrics['answerableFalseAbstentions']}/{metrics['answerableCases']} "
+        f"({metrics['answerableFalseAbstentionRate']}). Request/metric errors do not measure "
+        "semantic correctness.",
         "",
     ]
     lines.extend(
@@ -872,6 +903,34 @@ def _arguments() -> argparse.Namespace:
         description="Evaluate the running RAG service on bundled datasets"
     )
     parser.add_argument("--dataset", choices=["all", "pipeline_v2"], default="all")
+    ragas_source = parser.add_mutually_exclusive_group()
+    ragas_source.add_argument("--ragas-report", help="Score a saved live benchmark with RAGAS")
+    ragas_source.add_argument("--ragas-inputs", help="Score previously exported RAGAS JSONL cases")
+    parser.add_argument("--ragas-trace-file", help="Exact selected evidence for older live reports")
+    parser.add_argument(
+        "--ragas-judge-model", help="Evaluator model (defaults to GENERATION_MODEL)"
+    )
+    parser.add_argument("--ragas-max-tokens", type=int, default=2048)
+    parser.add_argument("--ragas-concurrency", type=int, default=2)
+    parser.add_argument(
+        "--ragas-metrics",
+        nargs="+",
+        default=[
+            "faithfulness",
+            "answer_accuracy",
+            "answer_relevancy",
+            "context_precision",
+            "context_recall",
+        ],
+        choices=[
+            "faithfulness",
+            "factual_correctness",
+            "answer_accuracy",
+            "answer_relevancy",
+            "context_precision",
+            "context_recall",
+        ],
+    )
     parser.add_argument(
         "--retrieval-cases", help="Manual gold/failure cases in JSONL or a JSON array"
     )
@@ -923,6 +982,10 @@ def _arguments() -> argparse.Namespace:
     parsed.llm_url = parsed.llm_url or _env("RAG_EVAL_LLM_URL", DEFAULT_LLM_URL)
     if parsed.limit is not None and parsed.limit <= 0:
         parser.error("--limit must be greater than zero")
+    if not 256 <= parsed.ragas_max_tokens <= 8192:
+        parser.error("--ragas-max-tokens must be between 256 and 8192")
+    if not 1 <= parsed.ragas_concurrency <= 8:
+        parser.error("--ragas-concurrency must be between 1 and 8")
     if parsed.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be greater than zero")
     if parsed.ingestion_timeout_seconds <= 0:

@@ -53,6 +53,10 @@ class RagSettings(BaseSettings):
     rag_sufficiency_check_enabled: bool = True
     rag_claim_validation_enabled: bool = True
     rag_claim_validation_max_batches: int = Field(default=8, ge=1, le=16)
+    rag_grounding_reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low"
+    rag_grounding_max_output_tokens: int = Field(default=1024, ge=128, le=4096)
+    rag_answer_reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low"
+    rag_answer_reasoning_token_budget: int = Field(default=512, ge=0, le=4096)
     rag_trace_enabled: bool = True
     rag_trace_include_text: bool = False
     rag_debug_mode: bool = False

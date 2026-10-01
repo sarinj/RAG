@@ -8,13 +8,42 @@ from test_query_routing import RoutingProvider, corpus_for, execute_with, plan_f
 
 from rag_app.config import RagSettings
 from rag_app.errors import ServiceError
-from rag_app.generation.intents import exhaustive_route
+from rag_app.generation.intents import ChatIntent, exhaustive_route, social_message_only
 from rag_app.generation.prompts import ChatPromptBuilder
 from rag_app.generation.query_rewriting import retrieval_queries, understand_request
 from rag_app.models import QueryHit, QueryRoute, RetrievalMetadata, SourceGeneration
 from rag_app.providers.models import EmbeddingOutput
 from rag_app.retrieval.evidence import expand_neighbors
 from rag_app.retrieval.hybrid import bm25_candidates, fuse_rankings
+
+
+@pytest.mark.parametrize("intent", ["conversation", "source_catalog"])
+async def test_factual_request_misclassified_as_direct_cannot_bypass_sources(intent) -> None:
+    provider = RoutingProvider(
+        plan_for(
+            QueryRoute.LOCAL_SEARCH,
+            intent=intent,
+            direct_answer="A pass discount is available.",
+        )
+    )
+    plan = await understand_request(
+        provider,
+        tokenizer_for("Which riders qualify for a discount?"),
+        question="Which riders qualify for a discount?",
+        history=[],
+        context_window_tokens=8192,
+        max_output_tokens=512,
+    )
+    assert plan.intent is ChatIntent.SOURCE_QUESTION
+    assert plan.query_route is QueryRoute.LOCAL_SEARCH and plan.direct_answer is None
+
+
+@pytest.mark.parametrize(
+    "message", ["Hello!", "Thanks for your help", "สวัสดีครับ", "谢谢！", "Bonjour"]
+)
+def test_social_bypass_is_multilingual_and_cannot_swallow_a_question(message) -> None:
+    assert social_message_only(message)
+    assert not social_message_only(message + " What is the backup policy?")
 
 
 async def test_follow_up_query_preserves_technical_identifiers() -> None:

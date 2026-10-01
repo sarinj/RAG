@@ -53,12 +53,14 @@ class ChatPromptBuilder:
         if self._structured_claims:
             return (
                 "Return only a JSON object with a 'claims' array. Each claim has 'text' and "
-                "a nonempty 'source_chunk_ids' array of exact supplied chunkId UUID strings. "
+                "a nonempty 'source_labels' array of exact supplied source labels, e.g. S1. "
                 "Each claim must be a complete factual statement supported by its cited original "
                 "sources. Separate independently supported statements. Use no S citation markers "
                 "inside claim text; the application renders citations. Give the direct answer "
                 'first. If no supported answer exists, return {"claims":[]}. '
-                "Never invent facts or source IDs."
+                "Choose the label of the passage containing the supporting fact or rule, "
+                "not a nearby passage on the same topic. The application resolves labels to "
+                "original chunk IDs. Never invent facts or source labels."
             )
         return (
             "Your entire response must be a JSON object with exactly one string field named "
@@ -195,7 +197,6 @@ class ChatPromptBuilder:
         labeled_evidence = [
             {
                 "label": f"S{index}",
-                **({"chunkId": str(item.chunk.id)} if self._structured_claims else {}),
                 "document": item.document_name,
                 "pageStart": item.chunk.page_start,
                 "pageEnd": item.chunk.page_end,
@@ -262,9 +263,13 @@ class ChatPromptBuilder:
             "use history and the resolved search query to identify its subject, then restate "
             "only what the current evidence supports, with the current citation labels. "
             "Treat 'too long' as a request for a shorter answer about that subject. "
-            "Answer questions broadly about the documents: explain ideas, summarize, "
-            "compare sources, connect related points, and draw careful conclusions when the "
-            "evidence supports them. "
+            "Answer the exact requested aspects. For a factual question, give the shortest "
+            "complete answer and preserve material conditions, exceptions, dates and units. "
+            "Include each independent part; omit adjacent facts that do not answer the question. "
+            "For a calculation or hypothetical, apply the sourced rule to the values given in "
+            "the question and state the calculated result, not just the rule. Express it "
+            "conditionally and cite the rule. For explanations, comparisons and summaries, "
+            "connect related points only when the evidence supports them. "
             f"{_answer_length_instruction(max_words, query_route)}"
             "Match the requested level of detail; use paragraphs or lists "
             "for multi-part answers. When asked to explain something more simply, restate the same "

@@ -13,7 +13,13 @@ from tokenizers import Tokenizer
 from rag_app.config import RagSettings
 from rag_app.generation.answers import INSUFFICIENT_EVIDENCE_ANSWER
 from rag_app.generation.corpus import output_was_truncated
-from rag_app.generation.intents import ChatIntent, ChatPlan, exhaustive_route
+from rag_app.generation.intents import (
+    ChatIntent,
+    ChatPlan,
+    catalog_message_only,
+    exhaustive_route,
+    social_message_only,
+)
 from rag_app.models import DocumentMetadata, QueryRoute
 from rag_app.providers.models import GenerationInput
 from rag_app.providers.protocols import LLMProvider
@@ -131,6 +137,23 @@ async def understand_request(
         forced_route = exhaustive_route(question)
         info["route_guardrail"] = forced_route.value if forced_route else None
         updates: dict[str, object] = {"query": query}
+        invalid_direct = (
+            plan.intent is ChatIntent.CONVERSATION and not social_message_only(question)
+        ) or (plan.intent is ChatIntent.SOURCE_CATALOG and not catalog_message_only(question))
+        if invalid_direct:
+            updates.update(
+                intent=ChatIntent.SOURCE_QUESTION,
+                query_route=QueryRoute.LOCAL_SEARCH,
+                query=preserve_exact_terms(
+                    _fallback_plan(question, history, tokenizer).query, question
+                ),
+                direct_answer=None,
+                document_ids=[],
+                subquestions=[],
+                retrieval_queries=[],
+                reason="Factual requests require scoped evidence",
+            )
+            info["route_guardrail"] = "direct_intent_mismatch"
         if forced_route is not None:
             updates.update(
                 query_route=forced_route,

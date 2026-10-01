@@ -267,14 +267,17 @@ class EvidenceCoverage(StrEnum):
     INSUFFICIENT = "insufficient"
 
 
+MissingAspects = Annotated[
+    list[Annotated[str, StringConstraints(min_length=1, max_length=500)]], Field(max_length=8)
+]
+
+
 class EvidenceSufficiency(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     answerable: bool = Field(strict=True)
     coverage: EvidenceCoverage
-    missing_aspects: list[Annotated[str, StringConstraints(min_length=1, max_length=500)]] = Field(
-        default_factory=list, max_length=8
-    )
+    missing_aspects: MissingAspects = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_coverage(self) -> EvidenceSufficiency:

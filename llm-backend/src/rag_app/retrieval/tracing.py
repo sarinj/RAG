@@ -12,6 +12,7 @@ from typing import Any
 
 from rag_app.config import RagSettings
 from rag_app.models import ChatRequest, ChatResponse, EvidenceRecord
+from rag_app.providers.models import GenerationInput, GenerationOutput
 
 _LOGGER = logging.getLogger("rag_app.rag")
 _STAGES = (
@@ -46,6 +47,7 @@ class RagTrace:
     timings_ms: dict[str, float] = field(default_factory=lambda: dict.fromkeys(_STAGES, 0.0))
     retrieval_performed: bool = False
     started: float = field(default_factory=perf_counter)
+    repair_feedback: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         for stage in (
@@ -66,6 +68,22 @@ class RagTrace:
         self.fields[f"{name}_hash"] = text_hash(value)
         if self.settings.rag_trace_include_text:
             self.fields[name] = value
+
+    def generation(self, stage: str, request: GenerationInput, output: GenerationOutput) -> None:
+        self.fields.setdefault("llm_calls", []).append(
+            {
+                "stage": stage,
+                "model": output.model,
+                "reasoning_effort": request.reasoning_effort,
+                "reasoning_token_budget": request.reasoning_token_budget,
+                "max_output_tokens": request.max_output_tokens,
+                "structured_output": request.response_schema is not None,
+                "finish_reason": output.done_reason,
+                "prompt_tokens": output.prompt_eval_count,
+                "completion_tokens": output.eval_count,
+                "reasoning_tokens": output.reasoning_tokens,
+            }
+        )
 
     @contextmanager
     def measure(self, stage: str) -> Generator[None, None, None]:

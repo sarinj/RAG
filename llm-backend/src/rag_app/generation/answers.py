@@ -7,7 +7,7 @@ from typing import cast
 
 from pydantic import ValidationError
 
-from rag_app.generation.grounding import GroundedAnswer, clean_json
+from rag_app.generation.grounding import AnswerClaim, GroundedAnswer, LabeledAnswer, clean_json
 from rag_app.models import CONTRACT_VERSION, ChatRequest, ChatResponse, Citation, EvidenceRecord
 
 INSUFFICIENT_EVIDENCE_ANSWER = (
@@ -80,7 +80,7 @@ def parse_answer(
     *,
     require_claims: bool = False,
 ) -> ChatResponse | None:
-    structured = answer_claims(raw_answer)
+    structured = answer_claims(raw_answer, evidence)
     if structured is not None:
         if not structured.claims:
             return insufficient_evidence_response(request)
@@ -143,11 +143,34 @@ def parse_answer(
         return None
 
 
-def answer_claims(raw_answer: str) -> GroundedAnswer | None:
+def answer_claims(
+    raw_answer: str, evidence: Sequence[EvidenceRecord] = ()
+) -> GroundedAnswer | None:
+    # Keep the existing UUID format readable for saved drafts and older providers.
     try:
         return GroundedAnswer.model_validate_json(clean_json(raw_answer))
     except ValidationError:
+        pass
+    try:
+        labeled = LabeledAnswer.model_validate_json(clean_json(raw_answer))
+    except ValidationError:
         return None
+    sources = {f"S{index}": item.chunk.id for index, item in enumerate(evidence, 1)}
+    if any(
+        not set(claim.source_labels) <= sources.keys()
+        or len(claim.source_labels) != len(set(claim.source_labels))
+        for claim in labeled.claims
+    ):
+        return None
+    return GroundedAnswer(
+        claims=[
+            AnswerClaim(
+                text=claim.text,
+                source_chunk_ids=[sources[label] for label in claim.source_labels],
+            )
+            for claim in labeled.claims
+        ]
+    )
 
 
 def answer_text(raw_answer: str) -> str | None:
