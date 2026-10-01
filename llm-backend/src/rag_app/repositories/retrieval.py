@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import and_, func, or_, select, tuple_
 
 from rag_app.config import IndexConfiguration
-from rag_app.models import EvidenceChunk, EvidenceRecord, SourceGeneration
+from rag_app.errors import ServiceError
+from rag_app.models import (
+    DocumentMetadata,
+    EvidenceChunk,
+    EvidenceRecord,
+    RetrievalMetadata,
+    SourceGeneration,
+)
 from rag_app.repositories.database import Database
 from rag_app.repositories.orm import Chunk, Document, IndexGeneration
 
@@ -46,9 +53,16 @@ class RetrievalRepository:
         self,
         sources: list[SourceGeneration],
     ) -> list[str]:
+        documents = await self.list_accessible_documents(sources)
+        return [document.name for document in documents]
+
+    async def list_accessible_documents(
+        self,
+        sources: list[SourceGeneration],
+    ) -> list[DocumentMetadata]:
         source_pairs = [(source.document_id, source.generation_id) for source in sources]
         statement = (
-            select(Document.name)
+            select(Document.id, Document.name)
             .select_from(Document)
             .join(
                 IndexGeneration,
@@ -65,20 +79,40 @@ class RetrievalRepository:
         )
         async with self._session() as session:
             rows = await self._fetchall(session, statement)
-        return [str(row[0]) for row in rows]
+        return [DocumentMetadata(document_id=row[0], name=str(row[1])) for row in rows]
 
     async def retrieve(
         self,
         sources: list[SourceGeneration],
         query_embedding: list[float],
         config: IndexConfiguration,
+        *,
+        limit: int = RETRIEVAL_CANDIDATE_LIMIT,
     ) -> list[EvidenceRecord]:
-        statement = self._active_statement(sources, config).order_by(
-            Chunk.embedding.cosine_distance(query_embedding), Chunk.id
-        ).limit(RETRIEVAL_CANDIDATE_LIMIT)
+        statement = (
+            self._active_statement(sources, config)
+            .add_columns(
+                (1 - Chunk.embedding.cosine_distance(query_embedding)).label("vector_score")
+            )
+            .order_by(Chunk.embedding.cosine_distance(query_embedding), Chunk.id)
+            .limit(limit)
+        )
         async with self._session() as session:
             rows = await self._fetchall(session, statement)
-        return self._evidence_records(rows)
+        records = self._evidence_records(rows)
+        return [
+            record.model_copy(
+                update={
+                    "retrieval": RetrievalMetadata(
+                        vector_score=float(rows[index][14])
+                        if len(rows[index]) > 14 and rows[index][14] is not None
+                        else None,
+                        vector_rank=index + 1,
+                    )
+                }
+            )
+            for index, record in enumerate(records)
+        ]
 
     async def retrieve_active(
         self,
@@ -86,11 +120,60 @@ class RetrievalRepository:
         config: IndexConfiguration,
     ) -> list[EvidenceRecord]:
         """Load the active, source-scoped corpus used to rebuild per-request BM25."""
-        statement = self._active_statement(sources, config).order_by(Chunk.id).limit(
-            ACTIVE_CHUNK_LIMIT
+        return await self.retrieve_all(sources, config)
+
+    async def retrieve_neighbors(
+        self,
+        sources: list[SourceGeneration],
+        anchors: Sequence[EvidenceRecord],
+        config: IndexConfiguration,
+        *,
+        window: int = 1,
+    ) -> list[EvidenceRecord]:
+        allowed = {(source.document_id, source.generation_id) for source in sources}
+        anchors = [
+            item for item in anchors if (item.document_id, item.chunk.generation_id) in allowed
+        ]
+        if not anchors or window <= 0:
+            return []
+        windows = [
+            and_(
+                Document.id == item.document_id,
+                Chunk.generation_id == item.chunk.generation_id,
+                Chunk.ordinal.between(
+                    max(0, item.chunk.ordinal - window), item.chunk.ordinal + window
+                ),
+            )
+            for item in anchors
+        ]
+        statement = (
+            self._active_statement(sources, config)
+            .where(or_(*windows))
+            .order_by(Document.id, Chunk.ordinal, Chunk.id)
         )
         async with self._session() as session:
             rows = await self._fetchall(session, statement)
+        return self._evidence_records(rows)
+
+    async def retrieve_all(
+        self,
+        sources: list[SourceGeneration],
+        config: IndexConfiguration,
+    ) -> list[EvidenceRecord]:
+        """Read complete documents in source order; never silently sample the corpus."""
+        statement = (
+            self._active_statement(sources, config)
+            .order_by(Document.id, Chunk.ordinal, Chunk.id)
+            .limit(ACTIVE_CHUNK_LIMIT + 1)
+        )
+        async with self._session() as session:
+            rows = await self._fetchall(session, statement)
+        if len(rows) > ACTIVE_CHUNK_LIMIT:
+            raise ServiceError(
+                422,
+                "CORPUS_LIMIT_EXCEEDED",
+                "The complete selected corpus exceeds the supported chunk limit.",
+            )
         return self._evidence_records(rows)
 
     @staticmethod

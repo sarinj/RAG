@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Protocol
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Protocol, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -22,9 +23,13 @@ from rag_app.models import (
     ErrorEnvelope,
     EvaluationChatResponse,
     EvidenceRecord,
+    QueryDiagnostics,
+    RetrievalEvaluationResponse,
+    RetrievalStages,
     RetrievedCandidate,
 )
 from rag_app.repositories.documents import DocumentRepository
+from rag_app.retrieval.tracing import RagTrace, active_trace
 
 router = APIRouter(tags=["internal chat"])
 
@@ -33,12 +38,21 @@ class ChatExecutor(Protocol):
     async def answer(self, request: ChatRequest) -> ChatExecutionResult: ...
 
 
+class RetrievalEvaluator(Protocol):
+    async def retrieve_only(self, request: ChatRequest) -> ChatExecutionResult: ...
+
+
 @dataclass(frozen=True)
 class ChatExecutionResult:
     response: ChatResponse
     evidence_ids: frozenset[tuple[UUID, UUID, UUID]]
     retrieved_candidates: tuple[EvidenceRecord, ...] = ()
     reranked_candidates: tuple[EvidenceRecord, ...] = ()
+    diagnostics: QueryDiagnostics = field(default_factory=QueryDiagnostics)
+    vector_candidates: tuple[EvidenceRecord, ...] = ()
+    lexical_candidates: tuple[EvidenceRecord, ...] = ()
+    selected_evidence: tuple[EvidenceRecord, ...] = ()
+    neighbor_chunks: tuple[EvidenceRecord, ...] = ()
 
 
 @router.post(
@@ -75,7 +89,10 @@ async def chat(
         401: {"model": ErrorEnvelope, "description": "Missing or invalid internal token"},
         409: {"model": ErrorEnvelope, "description": "Source snapshot changed"},
         422: {"model": ErrorEnvelope, "description": "Citation is outside retrieved evidence"},
-        502: {"model": ErrorEnvelope, "description": "Executor response violated the internal contract"},
+        502: {
+            "model": ErrorEnvelope,
+            "description": "Executor response violated the internal contract",
+        },
         503: {"model": ErrorEnvelope, "description": "Service or model is unavailable"},
         504: {"model": ErrorEnvelope, "description": "Generation deadline exceeded"},
     },
@@ -89,26 +106,78 @@ async def evaluation_chat(
     result = await _execute_chat(payload, request)
     return EvaluationChatResponse(
         response=result.response,
-        retrieval_candidates=[
-            RetrievedCandidate(
-                chunk_id=evidence.chunk.id,
-                source_start=evidence.chunk.source_start,
-                source_end=evidence.chunk.source_end,
-            )
-            for evidence in result.retrieved_candidates
-        ],
-        reranked_candidates=[
-            RetrievedCandidate(
-                chunk_id=evidence.chunk.id,
-                source_start=evidence.chunk.source_start,
-                source_end=evidence.chunk.source_end,
-            )
-            for evidence in result.reranked_candidates
-        ],
+        diagnostics=result.diagnostics,
+        retrieval_candidates=_candidates(result.retrieved_candidates),
+        reranked_candidates=_candidates(result.reranked_candidates),
+        stages=_stages(result),
     )
 
 
-async def _execute_chat(payload: ChatRequest, request: Request) -> ChatExecutionResult:
+@router.post(
+    "/internal/evaluation/retrieval",
+    response_model=RetrievalEvaluationResponse,
+    summary="Evaluate scoped retrieval stages without answer generation",
+)
+async def evaluation_retrieval(
+    payload: ChatRequest,
+    request: Request,
+    _principal: None = Depends(require_internal_token),
+) -> RetrievalEvaluationResponse:
+    result = await _execute_chat(payload, request, retrieval_only=True)
+    return RetrievalEvaluationResponse(stages=_stages(result), diagnostics=result.diagnostics)
+
+
+def _candidates(records: Sequence[EvidenceRecord]) -> list[RetrievedCandidate]:
+    return [
+        RetrievedCandidate(
+            chunk_id=item.chunk.id,
+            document_id=item.document_id,
+            generation_id=item.chunk.generation_id,
+            ordinal=item.chunk.ordinal,
+            rank=rank,
+            retrieval=item.retrieval,
+            source_start=item.chunk.source_start,
+            source_end=item.chunk.source_end,
+        )
+        for rank, item in enumerate(records, 1)
+    ]
+
+
+def _stages(result: ChatExecutionResult) -> RetrievalStages:
+    return RetrievalStages(
+        vector=_candidates(result.vector_candidates),
+        lexical=_candidates(result.lexical_candidates),
+        hybrid=_candidates(result.retrieved_candidates),
+        reranked=_candidates(result.reranked_candidates),
+        selected=_candidates(result.selected_evidence),
+        neighbors=_candidates(result.neighbor_chunks),
+    )
+
+
+async def _execute_chat(
+    payload: ChatRequest, request: Request, *, retrieval_only: bool = False
+) -> ChatExecutionResult:
+    trace = RagTrace(payload, request.app.state.settings)
+    trace.fields["http_request_id"] = getattr(request.state, "request_id", None)
+    token = active_trace.set(trace)
+    result: ChatExecutionResult | None = None
+    error: BaseException | None = None
+    try:
+        result = await _execute_chat_impl(payload, request, retrieval_only=retrieval_only)
+        return result
+    except BaseException as exc:
+        error = exc
+        raise
+    finally:
+        trace.finish(result.response if result else None, error)
+        if result is not None:
+            result.diagnostics.timings_ms.update(trace.timings_ms)
+        active_trace.reset(token)
+
+
+async def _execute_chat_impl(
+    payload: ChatRequest, request: Request, *, retrieval_only: bool = False
+) -> ChatExecutionResult:
     if payload.contract_version != CONTRACT_VERSION:
         raise ServiceError(
             400,
@@ -118,7 +187,11 @@ async def _execute_chat(payload: ChatRequest, request: Request) -> ChatExecution
 
     try:
         repository = DocumentRepository(request.app.state.database)
-        snapshot_is_active = await repository.snapshot_is_active(payload.sources)
+        trace = active_trace.get()
+        if trace is None:
+            raise RuntimeError("Chat execution requires a trace context")
+        with trace.measure("scope_validation"):
+            snapshot_is_active = await repository.snapshot_is_active(payload.sources)
     except (DatabaseSchemaUnavailable, DatabaseUnavailable) as exc:
         raise ServiceError(503, "SERVICE_NOT_READY", "Source storage is unavailable") from exc
     if not snapshot_is_active:
@@ -129,7 +202,15 @@ async def _execute_chat(payload: ChatRequest, request: Request) -> ChatExecution
         raise ServiceError(503, "SERVICE_NOT_READY", "Chat generation is not configured")
     try:
         async with asyncio.timeout(request.app.state.settings.generation_timeout_seconds):
-            result = await executor.answer(payload)
+            if retrieval_only:
+                retrieve_only = getattr(executor, "retrieve_only", None)
+                if not callable(retrieve_only):
+                    raise ServiceError(
+                        503, "SERVICE_NOT_READY", "Retrieval evaluation is unavailable"
+                    )
+                result = await cast(RetrievalEvaluator, executor).retrieve_only(payload)
+            else:
+                result = await executor.answer(payload)
     except (ProviderTimeout, TimeoutError) as exc:
         raise ServiceError(504, "GENERATION_TIMEOUT", "Answer generation timed out") from exc
     except (DatabaseSchemaUnavailable, DatabaseUnavailable) as exc:
@@ -143,16 +224,19 @@ async def _execute_chat(payload: ChatRequest, request: Request) -> ChatExecution
             "INTERNAL_CONTRACT_ERROR",
             "Generation returned a mismatched request ID",
         )
-    allowed_sources = {(source.document_id, source.generation_id) for source in payload.sources}
-    if any(
-        (citation.document_id, citation.generation_id) not in allowed_sources
-        or (citation.document_id, citation.generation_id, citation.chunk_id)
-        not in result.evidence_ids
-        for citation in response.citations
-    ):
-        raise ServiceError(
-            422,
-            "INVALID_CITATIONS",
-            "Answer citations do not match retrieved evidence",
-        )
+    with trace.measure("citation_validation"):
+        allowed_sources = {(source.document_id, source.generation_id) for source in payload.sources}
+        if any(
+            (citation.document_id, citation.generation_id) not in allowed_sources
+            or (citation.document_id, citation.generation_id, citation.chunk_id)
+            not in result.evidence_ids
+            for citation in response.citations
+        ):
+            trace.fields["citation_validation"] = "outside_selected_evidence"
+            raise ServiceError(
+                422,
+                "INVALID_CITATIONS",
+                "Answer citations do not match retrieved evidence",
+            )
+        trace.fields["citation_validation"] = "valid"
     return result

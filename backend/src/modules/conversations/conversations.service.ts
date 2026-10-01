@@ -153,6 +153,7 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
       const response = await this.llm.chat({
         contractVersion: '1.1.0',
         requestId,
+        conversationId,
         question: content,
         history: created.history,
         sources: created.sources,

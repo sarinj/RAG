@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from rag_app.config import Settings, load_index_configuration
 from rag_app.evals.datasets import EvaluationCase, EvaluationDataset, load_datasets
+from rag_app.evals.retrieval import run_retrieval_evaluation
 from rag_app.repositories.database import Database
 from rag_app.repositories.orm import Document
 
@@ -29,6 +30,8 @@ REPORT_DIRECTORY = Path(__file__).resolve().parents[3] / "evals" / "reports"
 
 
 async def run_evaluation(args: argparse.Namespace) -> int:
+    if args.retrieval_cases:
+        return await run_retrieval_evaluation(args)
     settings = Settings()
     if not settings.internal_token:
         raise RuntimeError("INTERNAL_API_TOKEN must be configured to run RAG evaluation")
@@ -160,9 +163,7 @@ async def run_evaluation(args: argparse.Namespace) -> int:
             "retrievalMode": retrieval_mode,
             **index_identifiers,
         },
-        "metrics": _summarize(
-            [case for dataset in dataset_reports for case in dataset["cases"]]
-        ),
+        "metrics": _summarize([case for dataset in dataset_reports for case in dataset["cases"]]),
         "cleanupFailures": cleanup_failures,
         "datasets": dataset_reports,
         "metricNotes": [
@@ -171,14 +172,19 @@ async def run_evaluation(args: argparse.Namespace) -> int:
                 "it does not establish semantic correctness."
             ),
             (
-                "Candidate Recall@30 measures overlap with manually labeled source spans before reranking; "
+                "Candidate Recall@30 measures overlap with manually labeled source spans "
+                "before reranking; "
                 "reranked Recall@5 measures overlap in the final prompt evidence set."
             ),
             (
-                "Citation evidence precision and recall compare cited chunk spans with the labeled evidence; "
+                "Citation evidence precision and recall compare cited chunk spans with "
+                "the labeled evidence; "
                 "valid citation IDs alone do not establish factual correctness."
             ),
-            "Follow-up cases include prior user/assistant turns and score the current question's answer.",
+            "Follow-up cases include prior user/assistant turns and score "
+            "the current question's answer.",
+            "Top-K retrieval metrics describe LOCAL_SEARCH. Whole-corpus and iterative "
+            "routes also report their strategy, searches, and processed chunk coverage.",
         ],
     }
     stamp = started_at.strftime("%Y%m%dT%H%M%SZ")
@@ -418,9 +424,7 @@ async def _evaluate_case(
                 "correctAbstention": False if case.expected_answer is None else None,
                 "citationCount": 0,
                 "retrieval": (
-                    {"error": {"type": "EvaluationRequestFailed"}}
-                    if case.evidence_spans
-                    else None
+                    {"error": {"type": "EvaluationRequestFailed"}} if case.evidence_spans else None
                 ),
                 "latencyMs": elapsed_ms,
                 "error": {
@@ -454,8 +458,11 @@ async def _evaluate_case(
                 answer_status == "insufficient_evidence" if is_unanswerable else None
             ),
             "citationCount": len(citations),
+            "queryDiagnostics": evaluation_data.get("diagnostics"),
             "retrieval": (
-                _retrieval_metrics(case, candidates, reranked_candidates, citations)
+                _retrieval_metrics(
+                    case, candidates, reranked_candidates, citations, evaluation_data.get("stages")
+                )
                 if case.evidence_spans
                 else None
             ),
@@ -474,9 +481,7 @@ async def _evaluate_case(
             "answerTokenF1": 0.0 if case.expected_answer is not None else None,
             "correctAbstention": False if case.expected_answer is None else None,
             "citationCount": 0,
-            "retrieval": (
-                {"error": {"type": type(exc).__name__}} if case.evidence_spans else None
-            ),
+            "retrieval": ({"error": {"type": type(exc).__name__}} if case.evidence_spans else None),
             "latencyMs": round((monotonic() - started) * 1000, 2),
             "error": {"type": type(exc).__name__},
         }
@@ -487,6 +492,7 @@ def _retrieval_metrics(
     candidates: list[dict[str, Any]],
     reranked_candidates: list[dict[str, Any]],
     citations: list[dict[str, Any]],
+    stages: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "annotatedEvidenceCount": len(case.evidence_spans),
@@ -497,8 +503,8 @@ def _retrieval_metrics(
     }
 
     for prefix, ranked_candidates, cutoffs in (
-        ("candidate", candidates, (5, 10, 30)),
-        ("reranked", reranked_candidates, (5,)),
+        ("candidate", candidates, (5, 10, 20, 30, 50)),
+        ("reranked", reranked_candidates, (5, 10, 20, 50)),
     ):
         for cutoff in cutoffs:
             covered = _covered_evidence(case.evidence_spans, ranked_candidates[:cutoff])
@@ -507,7 +513,12 @@ def _retrieval_metrics(
 
     candidate_ranges = {
         candidate["chunkId"]: (candidate["sourceStart"], candidate["sourceEnd"])
-        for candidate in [*candidates, *reranked_candidates]
+        for candidate in [
+            *candidates,
+            *reranked_candidates,
+            *((stages or {}).get("selected", [])),
+            *((stages or {}).get("neighbors", [])),
+        ]
     }
     cited_ranges = [
         candidate_ranges[citation["chunkId"]]
@@ -521,16 +532,31 @@ def _retrieval_metrics(
         )
         for start, end in cited_ranges
     )
-    cited_candidates = [
-        {"sourceStart": start, "sourceEnd": end}
-        for start, end in cited_ranges
-    ]
+    cited_candidates = [{"sourceStart": start, "sourceEnd": end} for start, end in cited_ranges]
     evidence_cited = _covered_evidence(case.evidence_spans, cited_candidates)
     result["citationEvidencePrecision"] = round(
         relevant_citations / len(citations) if citations else 0.0,
         4,
     )
     result["citationEvidenceRecall"] = round(sum(evidence_cited) / len(evidence_cited), 4)
+    result["stages"] = {}
+    for stage, ranking in (stages or {}).items():
+        metrics: dict[str, float] = {}
+        for cutoff in (5, 10, 20, 50):
+            covered = _covered_evidence(case.evidence_spans, ranking[:cutoff])
+            metrics[f"recall@{cutoff}"] = sum(covered) / len(covered)
+        metrics["mrr"] = next(
+            (
+                1 / rank
+                for rank, candidate in enumerate(ranking, 1)
+                if any(_covered_evidence(case.evidence_spans, [candidate]))
+            ),
+            0.0,
+        )
+        metrics["source_coverage"] = sum(_covered_evidence(case.evidence_spans, ranking)) / len(
+            case.evidence_spans
+        )
+        result["stages"][stage] = metrics
     return result
 
 
@@ -540,8 +566,7 @@ def _covered_evidence(
 ) -> list[bool]:
     return [
         any(
-            candidate["sourceStart"] < evidence_end
-            and candidate["sourceEnd"] > evidence_start
+            candidate["sourceStart"] < evidence_end and candidate["sourceEnd"] > evidence_start
             for candidate in candidates
         )
         for evidence_start, evidence_end in evidence_spans
@@ -558,13 +583,22 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
     successful_retrieval_cases = [case for case in retrieval_cases if case.get("error") is None]
     failed_cases = sum(
         case["error"] is not None
-        or (
-            case.get("retrieval") is not None
-            and case["retrieval"].get("error") is not None
-        )
+        or (case.get("retrieval") is not None and case["retrieval"].get("error") is not None)
         for case in cases
     )
+    stage_summary: dict[str, dict[str, float]] = {}
+    for stage in ("vector", "lexical", "hybrid", "reranked", "selected"):
+        items = [
+            item["stages"][stage]
+            for item in successful_retrieval_cases
+            if stage in item.get("stages", {})
+        ]
+        if items:
+            stage_summary[stage] = {
+                name: round(statistics.mean(item[name] for item in items), 4) for name in items[0]
+            }
     return {
+        "retrievalStages": stage_summary,
         "totalCases": len(cases),
         "failedCases": failed_cases,
         "answerableCases": len(answerable),
@@ -599,8 +633,7 @@ def _summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "unanswerableAbstentionAccuracy": (
             round(
-                sum(case["correctAbstention"] is True for case in unanswerable)
-                / len(unanswerable),
+                sum(case["correctAbstention"] is True for case in unanswerable) / len(unanswerable),
                 4,
             )
             if unanswerable
@@ -685,6 +718,9 @@ def _render_console_summary(report: dict[str, Any]) -> str:
         f"Answered with citations: {metrics['answeredWithCitationRate']}",
         f"Latency ms p50/p95: {metrics['latencyMsP50']} / {metrics['latencyMsP95']}",
     ]
+    stage_metrics: dict[str, dict[str, float]] = metrics.get("retrievalStages", {})
+    for stage, values in stage_metrics.items():
+        lines.append(f"{stage}: " + ", ".join(f"{key}={value}" for key, value in values.items()))
     for dataset in report["datasets"]:
         item = dataset["metrics"]
         lines.append(
@@ -736,6 +772,19 @@ def _render_markdown(report: dict[str, Any]) -> str:
         ),
         "",
     ]
+    lines.extend(
+        [
+            "## Retrieval stages",
+            "",
+            "| Stage | Recall@5 | Recall@10 | Recall@20 | Recall@50 | MRR | Source coverage |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    stage_metrics: dict[str, dict[str, float]] = metrics.get("retrievalStages", {})
+    for stage, values in stage_metrics.items():
+        names = ("recall@5", "recall@10", "recall@20", "recall@50", "mrr", "source_coverage")
+        lines.append("| " + stage + " | " + " | ".join(str(values[name]) for name in names) + " |")
+    lines.append("")
     for dataset in report["datasets"]:
         metadata = dataset["dataset"]
         source = dataset["sourceDocument"]
@@ -753,7 +802,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
                 f"Dataset SHA-256: `{metadata['sourceSha256']}`",
                 f"Corpus SHA-256: `{metadata['corpusSha256']}`",
                 "",
-                "| ID | Type | Token F1 | Candidate Recall@30 | Reranked Recall@5 | Citation evidence P/R | Status | Latency ms | Question | Answer | Gold answer |",
+                "| ID | Type | Token F1 | Candidate Recall@30 | Reranked Recall@5 | "
+                "Citation evidence P/R | Status | Latency ms | Question | Answer | Gold answer |",
                 "| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | --- | --- | --- |",
             ]
         )
@@ -823,6 +873,17 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--dataset", choices=["all", "pipeline_v2"], default="all")
     parser.add_argument(
+        "--retrieval-cases", help="Manual gold/failure cases in JSONL or a JSON array"
+    )
+    parser.add_argument("--trace-file", help="Replay JSONL rag_trace events for retrieval cases")
+    parser.add_argument(
+        "--offline", action="store_true", help="Evaluate saved actual rankings without services"
+    )
+    parser.add_argument(
+        "--failure-output", help="Save cases missing gold chunks in selected evidence as JSONL"
+    )
+    parser.add_argument("--retrieval-mode", choices=["hybrid", "vector"], default="hybrid")
+    parser.add_argument(
         "--source",
         action="append",
         default=[],
@@ -854,6 +915,10 @@ def _arguments() -> argparse.Namespace:
         help="Keep the temporary evaluation corpus documents after the run",
     )
     parsed = parser.parse_args()
+    if (
+        parsed.trace_file or parsed.offline or parsed.failure_output
+    ) and not parsed.retrieval_cases:
+        parser.error("retrieval replay/failure options require --retrieval-cases")
     parsed.backend_url = parsed.backend_url or _env("RAG_EVAL_BACKEND_URL", DEFAULT_BACKEND_URL)
     parsed.llm_url = parsed.llm_url or _env("RAG_EVAL_LLM_URL", DEFAULT_LLM_URL)
     if parsed.limit is not None and parsed.limit <= 0:

@@ -43,6 +43,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
         owns_provider = app.state.provider is None
         try:
             config = load_index_configuration(active_settings.index_config_path)
@@ -63,6 +64,7 @@ def create_app(
                     app.state.provider,
                     config,
                     tokenizer,
+                    active_settings,
                 )
         except Exception as exc:
             logger.error(

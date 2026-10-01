@@ -9,7 +9,7 @@ import httpx
 from rag_app.api.chat import ChatExecutionResult
 from rag_app.config import Settings
 from rag_app.main import create_app
-from rag_app.models import ChatRequest, ChatResponse
+from rag_app.models import ChatRequest, ChatResponse, QueryDiagnostics, QueryRoute
 
 REQUEST_ID = "44444444-4444-4444-8444-444444444444"
 DOCUMENT_ID = "11111111-1111-4111-8111-111111111111"
@@ -273,3 +273,94 @@ def test_openapi_advertises_versioned_internal_contract() -> None:
     assert "/internal/chat" in schema["paths"]
     assert "/health/ready" in schema["paths"]
     assert schema["components"]["securitySchemes"]["InternalBearer"]["type"] == "http"
+
+
+async def test_evaluation_reports_route_and_coverage_without_changing_chat_contract() -> None:
+    chat_response = ChatResponse(
+        contract_version="1.1.0",
+        request_id=UUID(REQUEST_ID),
+        answer="No supported answer.",
+        answer_status="insufficient_evidence",
+        citations=[],
+    )
+
+    class FakeExecutor:
+        async def answer(self, _request: ChatRequest) -> ChatExecutionResult:
+            return ChatExecutionResult(
+                response=chat_response,
+                evidence_ids=frozenset(),
+                diagnostics=QueryDiagnostics(
+                    route=QueryRoute.GLOBAL_SUMMARY,
+                    corpus_chunk_count=12,
+                    processed_chunk_count=12,
+                    reduction_rounds=2,
+                ),
+            )
+
+    async with client_for(FakeDatabase(), chat_executor=FakeExecutor()) as client:
+        headers = {"Authorization": "Bearer internal-test-token"}
+        public = await client.post("/internal/chat", json=request_body(), headers=headers)
+        evaluation = await client.post(
+            "/internal/evaluation/chat", json=request_body(), headers=headers
+        )
+
+    assert public.status_code == evaluation.status_code == 200
+    assert public.json() == chat_response.model_dump(mode="json", by_alias=True)
+    assert "diagnostics" not in public.json()
+    diagnostics = evaluation.json()["diagnostics"]
+    assert {
+        key: diagnostics[key]
+        for key in (
+            "route",
+            "searches",
+            "corpusChunkCount",
+            "processedChunkCount",
+            "reductionRounds",
+        )
+    } == {
+        "route": "GLOBAL_SUMMARY",
+        "searches": [],
+        "corpusChunkCount": 12,
+        "processedChunkCount": 12,
+        "reductionRounds": 2,
+    }
+    assert diagnostics["timingsMs"]["total"] > 0
+    assert "stages" in evaluation.json() and "stages" not in public.json()
+
+
+async def test_retrieval_evaluation_requires_token_and_rechecks_scope() -> None:
+    async with client_for(FakeDatabase()) as client:
+        unauthorized = await client.post("/internal/evaluation/retrieval", json=request_body())
+    assert unauthorized.status_code == 401
+    async with client_for(FakeDatabase(active=False)) as client:
+        changed = await client.post(
+            "/internal/evaluation/retrieval",
+            json=request_body(),
+            headers={"Authorization": "Bearer internal-test-token"},
+        )
+    assert changed.status_code == 409
+
+
+async def test_retrieval_evaluation_uses_retrieval_executor_without_returning_answer() -> None:
+    from rag_app.generation.answers import insufficient_evidence_response
+
+    class FakeExecutor:
+        async def answer(self, _request: ChatRequest) -> ChatExecutionResult:
+            raise AssertionError("Answer generation must not run")
+
+        async def retrieve_only(self, request: ChatRequest) -> ChatExecutionResult:
+            return ChatExecutionResult(
+                response=insufficient_evidence_response(request),
+                evidence_ids=frozenset(),
+                diagnostics=QueryDiagnostics(retrieval_only=True),
+            )
+
+    async with client_for(FakeDatabase(), chat_executor=FakeExecutor()) as client:
+        response = await client.post(
+            "/internal/evaluation/retrieval",
+            json=request_body(),
+            headers={"Authorization": "Bearer internal-test-token"},
+        )
+    assert response.status_code == 200
+    assert "response" not in response.json() and "answer" not in response.json()
+    assert response.json()["diagnostics"]["retrievalOnly"]

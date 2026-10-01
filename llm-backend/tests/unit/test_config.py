@@ -5,7 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from rag_app.config import IndexConfigurationError, Settings, load_index_configuration
+from rag_app.config import IndexConfigurationError, RagSettings, Settings, load_index_configuration
 
 
 def valid_index_config(**overrides: object) -> dict[str, object]:
@@ -25,6 +25,18 @@ def valid_index_config(**overrides: object) -> dict[str, object]:
     }
     config.update(overrides)
     return config
+
+
+def test_rag_environment_settings_validate_bounds_and_optional_budget(monkeypatch) -> None:
+    monkeypatch.setenv("RAG_VECTOR_CANDIDATE_LIMIT", "50")
+    monkeypatch.setenv("RAG_EVIDENCE_TOKEN_BUDGET", "")
+    settings = RagSettings()
+    assert settings.rag_vector_candidate_limit == 50
+    assert settings.rag_evidence_token_budget is None
+    with pytest.raises(ValidationError):
+        RagSettings(rag_multi_query_count=5)
+    with pytest.raises(ValidationError, match="candidate limit"):
+        RagSettings(rag_rerank_limit=4, rag_rerank_result_limit=5)
 
 
 def test_loads_shared_index_config_with_camel_case_fields(tmp_path) -> None:

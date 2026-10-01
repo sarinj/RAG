@@ -37,6 +37,7 @@ def test_chat_request_uses_contract_aliases_and_uuid_types() -> None:
     assert set(request.model_dump(by_alias=True)) == {
         "contractVersion",
         "requestId",
+        "conversationId",
         "question",
         "history",
         "sources",

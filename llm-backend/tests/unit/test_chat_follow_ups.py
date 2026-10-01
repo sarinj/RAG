@@ -9,14 +9,14 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import Whitespace
 
-from rag_app.config import IndexConfiguration
+from rag_app.config import IndexConfiguration, RagSettings
 from rag_app.generation.answers import INSUFFICIENT_EVIDENCE_ANSWER
 from rag_app.generation.chat import BaselineChatExecutor
 from rag_app.generation.intents import ChatIntent
 from rag_app.generation.prompts import ChatPromptBuilder
 from rag_app.generation.query_rewriting import understand_request
 from rag_app.generation.reranking import rerank_candidates
-from rag_app.models import ChatRequest, EvidenceChunk, EvidenceRecord
+from rag_app.models import ChatRequest, DocumentMetadata, EvidenceChunk, EvidenceRecord
 from rag_app.providers.models import (
     EmbeddingInput,
     EmbeddingOutput,
@@ -45,10 +45,11 @@ HISTORY = [
 def plan_response(
     query: str = "Project Solaris purpose",
     *,
-    intent: str = "document_question",
+    intent: str = "source_question",
     max_words: int | None = None,
     definition_subject: str | None = None,
     topic_message_index: int | None = None,
+    shorten: bool = False,
 ) -> str:
     return json.dumps(
         {
@@ -58,6 +59,7 @@ def plan_response(
             "definition_subject": definition_subject,
             "topic_message_index": topic_message_index,
             "direct_answer": None,
+            "shorten": shorten,
         }
     )
 
@@ -111,6 +113,13 @@ class ScopedRetrieval:
     def __init__(self, evidence: EvidenceRecord) -> None:
         self.evidence = evidence
 
+    async def list_accessible_documents(self, _sources) -> list[DocumentMetadata]:
+        return [
+            DocumentMetadata(
+                document_id=self.evidence.document_id, name=self.evidence.document_name
+            )
+        ]
+
     async def sources_match_index(self, sources, _config) -> bool:
         return (
             len(sources) == 1
@@ -118,7 +127,7 @@ class ScopedRetrieval:
             and sources[0].generation_id == self.evidence.chunk.generation_id
         )
 
-    async def retrieve(self, _sources, _embedding, _config) -> list[EvidenceRecord]:
+    async def retrieve(self, _sources, _embedding, _config, **_kwargs) -> list[EvidenceRecord]:
         return [self.evidence]
 
     async def retrieve_active(self, _sources, _config) -> list[EvidenceRecord]:
@@ -144,7 +153,7 @@ async def test_reranker_can_read_solaris_after_an_unrelated_opening_section() ->
     passages = json.loads(provider.generations[0].prompt.split("Candidates: ", 1)[1])
     assert "Project Solaris" in passages[1]["text"]
     assert "municipal energy optimization program" in passages[1]["text"]
-    assert relevant in ranked
+    assert relevant.chunk.id in {item.chunk.id for item in ranked}
 
 
 async def test_reranking_cannot_discard_the_strongest_retrieved_source() -> None:
@@ -161,7 +170,7 @@ async def test_reranking_cannot_discard_the_strongest_retrieved_source() -> None
         max_output_tokens=512,
     )
 
-    assert relevant in ranked
+    assert relevant.chunk.id in {item.chunk.id for item in ranked}
     assert len(ranked) == 5
     assert len({record.chunk.id for record in ranked}) == 5
 
@@ -181,7 +190,7 @@ async def test_failed_rewrite_keeps_the_subject_of_a_referential_question(respon
     )
 
     assert "Solaris" in plan.query
-    assert plan.intent is ChatIntent.DOCUMENT_QUESTION
+    assert plan.intent is ChatIntent.SOURCE_QUESTION
 
 
 @pytest.mark.parametrize("question", ["too long", "summarize it shortly", "make it shorter"])
@@ -190,7 +199,11 @@ async def test_presentation_request_uses_the_llm_to_identify_topic_and_brevity(
 ) -> None:
     word_limit = 50 if question == "summarize it shortly" else 25
     provider = ScriptedProvider(
-        [plan_response(intent="answer_shortening", max_words=word_limit, topic_message_index=2)]
+        [
+            plan_response(
+                intent="answer_revision", max_words=word_limit, topic_message_index=2, shorten=True
+            )
+        ]
     )
     plan = await understand_request(
         provider,
@@ -202,7 +215,8 @@ async def test_presentation_request_uses_the_llm_to_identify_topic_and_brevity(
     )
 
     assert "Solaris" in plan.query
-    assert plan.intent is ChatIntent.ANSWER_SHORTENING
+    assert plan.intent is ChatIntent.ANSWER_REVISION
+    assert plan.shorten
     assert plan.max_words == min(word_limit, len(HISTORY[-1]["content"].split()) - 1)
     assert len(provider.generations) == 1
 
@@ -219,7 +233,7 @@ async def test_failed_rewrite_preserves_a_question_that_changes_subject() -> Non
     )
 
     assert plan.query.startswith("Who leads Project Echo?")
-    assert plan.intent is ChatIntent.DOCUMENT_QUESTION
+    assert plan.intent is ChatIntent.SOURCE_QUESTION
 
 
 def test_old_history_cannot_crowd_the_best_source_out_of_a_follow_up_prompt() -> None:
@@ -268,7 +282,13 @@ def executor_for(monkeypatch, evidence: EvidenceRecord, provider: ScriptedProvid
         }
     )
     tokenizer = tokenizer_for(SOLARIS + SHORT_ANSWER + " Who leads Project Solaris?")
-    return BaselineChatExecutor(object(), provider, config, tokenizer)  # type: ignore[arg-type]
+    return BaselineChatExecutor(
+        object(),
+        provider,
+        config,
+        tokenizer,
+        RagSettings(rag_sufficiency_check_enabled=False, rag_claim_validation_enabled=False),
+    )  # type: ignore[arg-type]
 
 
 def request_for(evidence: EvidenceRecord, question: str) -> ChatRequest:
@@ -448,7 +468,7 @@ async def test_informal_definition_uses_the_source_if_generation_incorrectly_abs
     evidence = evidence_for(SOLARIS)
     provider = ScriptedProvider(
         [
-            plan_response(intent="document_definition", definition_subject="Solaris"),
+            plan_response(definition_subject="Solaris"),
             '{"answer":"INSUFFICIENT_EVIDENCE"}',
         ]
     )
@@ -479,9 +499,6 @@ async def test_unanswerable_or_ambiguous_question_still_abstains_after_one_retry
         [
             plan_response(
                 question,
-                intent="document_definition"
-                if question == "what is solaris?"
-                else "document_question",
                 definition_subject="Solaris" if question == "what is solaris?" else None,
             ),
             *['{"answer":"INSUFFICIENT_EVIDENCE"}'] * 2,

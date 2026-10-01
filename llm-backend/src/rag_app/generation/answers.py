@@ -5,6 +5,9 @@ import re
 from collections.abc import Sequence
 from typing import cast
 
+from pydantic import ValidationError
+
+from rag_app.generation.grounding import GroundedAnswer, clean_json
 from rag_app.models import CONTRACT_VERSION, ChatRequest, ChatResponse, Citation, EvidenceRecord
 
 INSUFFICIENT_EVIDENCE_ANSWER = (
@@ -74,10 +77,37 @@ def parse_answer(
     raw_answer: str,
     request: ChatRequest,
     evidence: Sequence[EvidenceRecord],
+    *,
+    require_claims: bool = False,
 ) -> ChatResponse | None:
-    answer = answer_text(raw_answer)
+    structured = answer_claims(raw_answer)
+    if structured is not None:
+        if not structured.claims:
+            return insufficient_evidence_response(request)
+        allowed_scope = {(source.document_id, source.generation_id) for source in request.sources}
+        labels = {
+            item.chunk.id: f"S{index}"
+            for index, item in enumerate(evidence, 1)
+            if (item.document_id, item.chunk.generation_id) in allowed_scope
+        }
+        if any(
+            not set(claim.source_chunk_ids) <= labels.keys()
+            or len(claim.source_chunk_ids) != len(set(claim.source_chunk_ids))
+            or re.search(r"\[S[0-9]+\]", claim.text)
+            for claim in structured.claims
+        ):
+            return None
+        answer = "\n\n".join(
+            f"{claim.text} " + " ".join(f"[{labels[source]}]" for source in claim.source_chunk_ids)
+            for claim in structured.claims
+        )
+    elif require_claims:
+        return None
+    else:
+        answer = answer_text(raw_answer)
     if answer is None:
         return None
+
     if answer.casefold() in {"insufficient_evidence", "insufficient evidence"}:
         return insufficient_evidence_response(request)
 
@@ -110,6 +140,13 @@ def parse_answer(
             citations=citations,
         )
     except ValueError:
+        return None
+
+
+def answer_claims(raw_answer: str) -> GroundedAnswer | None:
+    try:
+        return GroundedAnswer.model_validate_json(clean_json(raw_answer))
+    except ValidationError:
         return None
 
 

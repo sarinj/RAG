@@ -32,7 +32,46 @@ class ProviderConnection:
     api_key: str | None = field(repr=False)
 
 
-class Settings(BaseSettings):
+class RagSettings(BaseSettings):
+    """Runtime retrieval controls; these do not change an indexed generation's identity."""
+
+    rag_query_rewrite_enabled: bool = True
+    rag_multi_query_enabled: bool = False
+    rag_multi_query_count: int = Field(default=3, ge=1, le=4)
+    rag_decomposition_enabled: bool = True
+    rag_max_subquestions: int = Field(default=4, ge=1, le=4)
+    rag_vector_candidate_limit: int = Field(default=30, ge=1, le=200)
+    rag_lexical_candidate_limit: int = Field(default=30, ge=1, le=200)
+    rag_rrf_limit: int = Field(default=30, ge=1, le=400)
+    rag_rerank_limit: int = Field(default=30, ge=1, le=100)
+    rag_rerank_result_limit: int = Field(default=5, ge=1, le=100)
+    rag_neighbor_expansion_enabled: bool = False
+    rag_neighbor_window: int = Field(default=1, ge=0, le=3)
+    rag_neighbor_top_n: int = Field(default=2, ge=1, le=10)
+    rag_final_evidence_limit: int = Field(default=5, ge=1, le=30)
+    rag_evidence_token_budget: int | None = Field(default=None, ge=1)
+    rag_sufficiency_check_enabled: bool = True
+    rag_claim_validation_enabled: bool = True
+    rag_claim_validation_max_batches: int = Field(default=8, ge=1, le=16)
+    rag_trace_enabled: bool = True
+    rag_trace_include_text: bool = False
+    rag_debug_mode: bool = False
+
+    @model_validator(mode="after")
+    def validate_rag_limits(self) -> RagSettings:
+        if self.rag_rerank_result_limit > self.rag_rerank_limit:
+            raise ValueError("reranker result limit cannot exceed its candidate limit")
+        if self.rag_trace_include_text and not self.rag_debug_mode:
+            raise ValueError("text tracing requires explicit RAG_DEBUG_MODE=true")
+        return self
+
+    @field_validator("rag_evidence_token_budget", mode="before")
+    @classmethod
+    def normalize_evidence_budget(cls, value: object) -> object:
+        return None if value == "" else value
+
+
+class Settings(RagSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -139,8 +178,7 @@ class Settings(BaseSettings):
         return ProviderConnection(
             provider=self.llm_provider,
             base_url=(
-                self.llm_provider_base_url
-                or self.default_provider_base_url(self.llm_provider)
+                self.llm_provider_base_url or self.default_provider_base_url(self.llm_provider)
             ),
             api_key=self.secret_value(self.llm_provider_api_key),
         )

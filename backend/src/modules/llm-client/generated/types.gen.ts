@@ -13,6 +13,10 @@ export type ChatRequest = {
      */
     contractVersion: string;
     /**
+     * Conversationid
+     */
+    conversationId?: string | null;
+    /**
      * History
      */
     history: Array<HistoryMessage>;
@@ -120,6 +124,7 @@ export type ErrorEnvelope = {
  * EvaluationChatResponse
  */
 export type EvaluationChatResponse = {
+    diagnostics?: QueryDiagnostics;
     /**
      * Rerankedcandidates
      */
@@ -129,6 +134,37 @@ export type EvaluationChatResponse = {
      * Retrievalcandidates
      */
     retrievalCandidates: Array<RetrievedCandidate>;
+    stages?: RetrievalStages;
+};
+
+/**
+ * EvidenceCoverage
+ */
+export type EvidenceCoverage = 'complete' | 'partial' | 'insufficient';
+
+/**
+ * EvidenceSufficiency
+ */
+export type EvidenceSufficiency = {
+    /**
+     * Answerable
+     */
+    answerable: boolean;
+    coverage: EvidenceCoverage;
+    /**
+     * Missing Aspects
+     */
+    missing_aspects?: Array<string>;
+};
+
+/**
+ * HTTPValidationError
+ */
+export type HttpValidationError = {
+    /**
+     * Detail
+     */
+    detail?: Array<ValidationError>;
 };
 
 /**
@@ -156,6 +192,173 @@ export type HistoryMessage = {
 };
 
 /**
+ * QueryDiagnostics
+ */
+export type QueryDiagnostics = {
+    /**
+     * Configuration
+     */
+    configuration?: {
+        [key: string]: number | boolean | null;
+    };
+    /**
+     * Corpuschunkcount
+     */
+    corpusChunkCount?: number | null;
+    /**
+     * Effectivescope
+     */
+    effectiveScope?: Array<SourceGeneration>;
+    evidenceSufficiency?: EvidenceSufficiency | null;
+    /**
+     * Processedchunkcount
+     */
+    processedChunkCount?: number;
+    /**
+     * Reductionrounds
+     */
+    reductionRounds?: number;
+    /**
+     * Retrievalonly
+     */
+    retrievalOnly?: boolean;
+    route?: QueryRoute | null;
+    /**
+     * Searches
+     */
+    searches?: Array<string>;
+    /**
+     * Standalonequery
+     */
+    standaloneQuery?: string | null;
+    /**
+     * Subquestions
+     */
+    subquestions?: Array<string>;
+    /**
+     * Timingsms
+     */
+    timingsMs?: {
+        [key: string]: number;
+    };
+};
+
+/**
+ * QueryHit
+ */
+export type QueryHit = {
+    /**
+     * Channel
+     */
+    channel: 'vector' | 'lexical';
+    /**
+     * Query
+     */
+    query: string;
+    /**
+     * Rank
+     */
+    rank: number;
+    /**
+     * Score
+     */
+    score?: number | null;
+    /**
+     * Subquestion
+     */
+    subquestion?: string | null;
+};
+
+/**
+ * QueryRoute
+ */
+export type QueryRoute = 'LOCAL_SEARCH' | 'GLOBAL_SUMMARY' | 'AGGREGATION_LIST' | 'MULTI_HOP';
+
+/**
+ * RetrievalEvaluationResponse
+ */
+export type RetrievalEvaluationResponse = {
+    diagnostics: QueryDiagnostics;
+    stages: RetrievalStages;
+};
+
+/**
+ * RetrievalMetadata
+ */
+export type RetrievalMetadata = {
+    /**
+     * Fused Rank
+     */
+    fused_rank?: number | null;
+    /**
+     * Lexical Rank
+     */
+    lexical_rank?: number | null;
+    /**
+     * Lexical Score
+     */
+    lexical_score?: number | null;
+    /**
+     * Neighbor Of
+     */
+    neighbor_of?: Array<string>;
+    /**
+     * Query Hits
+     */
+    query_hits?: Array<QueryHit>;
+    /**
+     * Reranker Rank
+     */
+    reranker_rank?: number | null;
+    /**
+     * Reranker Score
+     */
+    reranker_score?: number | null;
+    /**
+     * Rrf Score
+     */
+    rrf_score?: number | null;
+    /**
+     * Vector Rank
+     */
+    vector_rank?: number | null;
+    /**
+     * Vector Score
+     */
+    vector_score?: number | null;
+};
+
+/**
+ * RetrievalStages
+ */
+export type RetrievalStages = {
+    /**
+     * Hybrid
+     */
+    hybrid?: Array<RetrievedCandidate>;
+    /**
+     * Lexical
+     */
+    lexical?: Array<RetrievedCandidate>;
+    /**
+     * Neighbors
+     */
+    neighbors?: Array<RetrievedCandidate>;
+    /**
+     * Reranked
+     */
+    reranked?: Array<RetrievedCandidate>;
+    /**
+     * Selected
+     */
+    selected?: Array<RetrievedCandidate>;
+    /**
+     * Vector
+     */
+    vector?: Array<RetrievedCandidate>;
+};
+
+/**
  * RetrievedCandidate
  */
 export type RetrievedCandidate = {
@@ -163,6 +366,23 @@ export type RetrievedCandidate = {
      * Chunkid
      */
     chunkId: string;
+    /**
+     * Documentid
+     */
+    documentId?: string | null;
+    /**
+     * Generationid
+     */
+    generationId?: string | null;
+    /**
+     * Ordinal
+     */
+    ordinal?: number | null;
+    /**
+     * Rank
+     */
+    rank?: number | null;
+    retrieval?: RetrievalMetadata;
     /**
      * Sourceend
      */
@@ -185,6 +405,34 @@ export type SourceGeneration = {
      * Generationid
      */
     generationId: string;
+};
+
+/**
+ * ValidationError
+ */
+export type ValidationError = {
+    /**
+     * Context
+     */
+    ctx?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Input
+     */
+    input?: unknown;
+    /**
+     * Location
+     */
+    loc: Array<string | number>;
+    /**
+     * Message
+     */
+    msg: string;
+    /**
+     * Error Type
+     */
+    type: string;
 };
 
 export type LiveHealthLiveGetData = {
@@ -325,3 +573,28 @@ export type EvaluationChatInternalEvaluationChatPostResponses = {
 };
 
 export type EvaluationChatInternalEvaluationChatPostResponse = EvaluationChatInternalEvaluationChatPostResponses[keyof EvaluationChatInternalEvaluationChatPostResponses];
+
+export type EvaluationRetrievalInternalEvaluationRetrievalPostData = {
+    body: ChatRequest;
+    path?: never;
+    query?: never;
+    url: '/internal/evaluation/retrieval';
+};
+
+export type EvaluationRetrievalInternalEvaluationRetrievalPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EvaluationRetrievalInternalEvaluationRetrievalPostError = EvaluationRetrievalInternalEvaluationRetrievalPostErrors[keyof EvaluationRetrievalInternalEvaluationRetrievalPostErrors];
+
+export type EvaluationRetrievalInternalEvaluationRetrievalPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RetrievalEvaluationResponse;
+};
+
+export type EvaluationRetrievalInternalEvaluationRetrievalPostResponse = EvaluationRetrievalInternalEvaluationRetrievalPostResponses[keyof EvaluationRetrievalInternalEvaluationRetrievalPostResponses];

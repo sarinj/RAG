@@ -10,6 +10,18 @@
             "title": "Contractversion",
             "type": "string"
           },
+          "conversationId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversationid"
+          },
           "history": {
             "items": {
               "$ref": "#/components/schemas/HistoryMessage"
@@ -207,6 +219,9 @@
       "EvaluationChatResponse": {
         "additionalProperties": false,
         "properties": {
+          "diagnostics": {
+            "$ref": "#/components/schemas/QueryDiagnostics"
+          },
           "rerankedCandidates": {
             "items": {
               "$ref": "#/components/schemas/RetrievedCandidate"
@@ -223,6 +238,9 @@
             },
             "title": "Retrievalcandidates",
             "type": "array"
+          },
+          "stages": {
+            "$ref": "#/components/schemas/RetrievalStages"
           }
         },
         "required": [
@@ -231,6 +249,56 @@
           "rerankedCandidates"
         ],
         "title": "EvaluationChatResponse",
+        "type": "object"
+      },
+      "EvidenceCoverage": {
+        "enum": [
+          "complete",
+          "partial",
+          "insufficient"
+        ],
+        "title": "EvidenceCoverage",
+        "type": "string"
+      },
+      "EvidenceSufficiency": {
+        "additionalProperties": false,
+        "properties": {
+          "answerable": {
+            "title": "Answerable",
+            "type": "boolean"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/EvidenceCoverage"
+          },
+          "missing_aspects": {
+            "items": {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Missing Aspects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "answerable",
+          "coverage"
+        ],
+        "title": "EvidenceSufficiency",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
         "type": "object"
       },
       "HealthResponse": {
@@ -275,6 +343,355 @@
         "title": "HistoryMessage",
         "type": "object"
       },
+      "QueryDiagnostics": {
+        "additionalProperties": false,
+        "properties": {
+          "configuration": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Configuration",
+            "type": "object"
+          },
+          "corpusChunkCount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corpuschunkcount"
+          },
+          "effectiveScope": {
+            "items": {
+              "$ref": "#/components/schemas/SourceGeneration"
+            },
+            "title": "Effectivescope",
+            "type": "array"
+          },
+          "evidenceSufficiency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceSufficiency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processedChunkCount": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Processedchunkcount",
+            "type": "integer"
+          },
+          "reductionRounds": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Reductionrounds",
+            "type": "integer"
+          },
+          "retrievalOnly": {
+            "default": false,
+            "title": "Retrievalonly",
+            "type": "boolean"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueryRoute"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "searches": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Searches",
+            "type": "array"
+          },
+          "standaloneQuery": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standalonequery"
+          },
+          "subquestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Subquestions",
+            "type": "array"
+          },
+          "timingsMs": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Timingsms",
+            "type": "object"
+          }
+        },
+        "title": "QueryDiagnostics",
+        "type": "object"
+      },
+      "QueryHit": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "enum": [
+              "vector",
+              "lexical"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "rank": {
+            "minimum": 1.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "subquestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subquestion"
+          }
+        },
+        "required": [
+          "query",
+          "channel",
+          "rank"
+        ],
+        "title": "QueryHit",
+        "type": "object"
+      },
+      "QueryRoute": {
+        "enum": [
+          "LOCAL_SEARCH",
+          "GLOBAL_SUMMARY",
+          "AGGREGATION_LIST",
+          "MULTI_HOP"
+        ],
+        "title": "QueryRoute",
+        "type": "string"
+      },
+      "RetrievalEvaluationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnostics": {
+            "$ref": "#/components/schemas/QueryDiagnostics"
+          },
+          "stages": {
+            "$ref": "#/components/schemas/RetrievalStages"
+          }
+        },
+        "required": [
+          "stages",
+          "diagnostics"
+        ],
+        "title": "RetrievalEvaluationResponse",
+        "type": "object"
+      },
+      "RetrievalMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "fused_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fused Rank"
+          },
+          "lexical_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lexical Rank"
+          },
+          "lexical_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lexical Score"
+          },
+          "neighbor_of": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Neighbor Of",
+            "type": "array"
+          },
+          "query_hits": {
+            "items": {
+              "$ref": "#/components/schemas/QueryHit"
+            },
+            "title": "Query Hits",
+            "type": "array"
+          },
+          "reranker_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reranker Rank"
+          },
+          "reranker_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reranker Score"
+          },
+          "rrf_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf Score"
+          },
+          "vector_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Rank"
+          },
+          "vector_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Score"
+          }
+        },
+        "title": "RetrievalMetadata",
+        "type": "object"
+      },
+      "RetrievalStages": {
+        "additionalProperties": false,
+        "properties": {
+          "hybrid": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Hybrid",
+            "type": "array"
+          },
+          "lexical": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Lexical",
+            "type": "array"
+          },
+          "neighbors": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Neighbors",
+            "type": "array"
+          },
+          "reranked": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Reranked",
+            "type": "array"
+          },
+          "selected": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Selected",
+            "type": "array"
+          },
+          "vector": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievedCandidate"
+            },
+            "title": "Vector",
+            "type": "array"
+          }
+        },
+        "title": "RetrievalStages",
+        "type": "object"
+      },
       "RetrievedCandidate": {
         "additionalProperties": false,
         "properties": {
@@ -282,6 +699,55 @@
             "format": "uuid",
             "title": "Chunkid",
             "type": "string"
+          },
+          "documentId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentid"
+          },
+          "generationId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generationid"
+          },
+          "ordinal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordinal"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "retrieval": {
+            "$ref": "#/components/schemas/RetrievalMetadata"
           },
           "sourceEnd": {
             "exclusiveMinimum": 0.0,
@@ -321,6 +787,46 @@
           "generationId"
         ],
         "title": "SourceGeneration",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       }
     },
@@ -597,6 +1103,52 @@
           }
         ],
         "summary": "Run internal chat and include retrieved candidates for evaluation",
+        "tags": [
+          "internal chat"
+        ]
+      }
+    },
+    "/internal/evaluation/retrieval": {
+      "post": {
+        "operationId": "evaluation_retrieval_internal_evaluation_retrieval_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetrievalEvaluationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "InternalBearer": []
+          }
+        ],
+        "summary": "Evaluate scoped retrieval stages without answer generation",
         "tags": [
           "internal chat"
         ]
