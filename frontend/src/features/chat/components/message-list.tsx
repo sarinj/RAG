@@ -7,8 +7,11 @@ import { LoadingState } from "@/components/ui/feedback";
 import { formatDate } from "@/lib/utils";
 import { Citation, MessageRecord } from "../api";
 import { AnswerMarkdown } from "./answer-markdown";
+import { AnswerProgress, StreamingDraft } from "./answer-progress";
+import type { StreamReply } from "../streaming";
 
 type TurnMessages = { requestId: string; user?: MessageRecord; assistant?: MessageRecord };
+const NO_STREAMS: Record<string, StreamReply> = {};
 
 function groupTurns(messages: MessageRecord[]) {
   const turns = new Map<string, TurnMessages>();
@@ -39,11 +42,14 @@ function CitationList({ citations, onCitation }: { citations: Citation[]; onCita
   );
 }
 
-function PendingAnswer({ label }: { label: string }) {
+function CompletedAnswer({ message, onCitation }: { message: MessageRecord; onCitation: (citation: Citation) => void }) {
   return (
-    <div className="pending-answer" role="status" aria-live="polite">
-      <span>{label}</span>
-      <span className="thinking-dots" aria-hidden="true"><i /><i /><i /></span>
+    <div className="assistant-answer">
+      {message.answerStatus === "insufficient_evidence" && (
+        <div className="insufficient-evidence"><span className="evidence-dot" aria-hidden="true" /><span>Not enough evidence in this document scope</span></div>
+      )}
+      <AnswerMarkdown content={message.content} citations={message.citations} onCitation={onCitation} />
+      <CitationList citations={message.citations} onCitation={onCitation} />
     </div>
   );
 }
@@ -58,6 +64,7 @@ export function MessageList({
   onCitation,
   onRetry,
   retryDisabled,
+  streams = NO_STREAMS,
 }: {
   messages: MessageRecord[];
   generatingTurn: { requestId: string; content: string; createdAt: string } | null;
@@ -68,6 +75,7 @@ export function MessageList({
   onCitation: (citation: Citation) => void;
   onRetry: (question: string) => void;
   retryDisabled: boolean;
+  streams?: Record<string, StreamReply>;
 }) {
   const turns = useMemo(() => groupTurns(messages), [messages]);
   const showGeneratingTurn = generatingTurn && !turns.some((turn) => turn.requestId === generatingTurn.requestId);
@@ -90,50 +98,52 @@ export function MessageList({
           <p>Ask about a detail, compare ideas across documents, or find where something is explained. Answers will include clickable source markers.</p>
         </div>
       )}
-      {turns.map((turn) => (
-        <article className="message-turn" key={turn.requestId}>
-          {turn.user && (
-            <div className="user-message-row">
-              <div className="user-message-content">
-                <div className="message-meta"><span>You</span><time dateTime={turn.user.createdAt}>{formatDate(turn.user.createdAt)}</time></div>
-                <div className="user-message-bubble">{turn.user.content}</div>
-              </div>
-              <span className="message-avatar user-avatar" aria-hidden="true">S</span>
-            </div>
-          )}
-          {turn.assistant && (
-            <div className="assistant-message-row">
-              <span className="message-avatar assistant-avatar" aria-hidden="true"><MessageSquareText size={16} /></span>
-              <div className="assistant-message-content">
-                <div className="message-meta assistant-meta">
-                  <span>Sourcebook</span>
-                  <time dateTime={turn.assistant.createdAt}>{formatDate(turn.assistant.createdAt)}</time>
-                  {turn.assistant.status === "completed" && <span className="saved-status"><CheckCircle2 size={12} aria-hidden="true" /> Saved</span>}
+      {turns.map((turn) => {
+        const stream = streams[turn.requestId];
+        const assistant = stream?.turn?.assistantMessage ?? turn.assistant;
+        return (
+          <article className="message-turn" key={turn.requestId}>
+            {turn.user && (
+              <div className="user-message-row">
+                <div className="user-message-content">
+                  <div className="message-meta"><span>You</span><time dateTime={turn.user.createdAt}>{formatDate(turn.user.createdAt)}</time></div>
+                  <div className="user-message-bubble">{turn.user.content}</div>
                 </div>
-                {turn.assistant.status === "pending" && (
-                  <PendingAnswer label="Searching your sources" />
-                )}
-                {turn.assistant.status === "failed" && (
-                  <div className="failed-answer" role="alert">
-                    <div className="failed-answer-title"><AlertCircle size={17} aria-hidden="true" /><strong>This answer could not be completed</strong></div>
-                    <p>{turn.assistant.error?.message ?? "The server could not complete this turn."}</p>
-                    {turn.user && <Button variant="outline" size="sm" onClick={() => onRetry(turn.user!.content)} disabled={retryDisabled}><RotateCcw size={14} aria-hidden="true" /> Try again</Button>}
-                  </div>
-                )}
-                {turn.assistant.status === "completed" && (
-                  <div className="assistant-answer">
-                    {turn.assistant.answerStatus === "insufficient_evidence" && (
-                      <div className="insufficient-evidence"><span className="evidence-dot" aria-hidden="true" /><span>Not enough evidence in this document scope</span></div>
-                    )}
-                    <AnswerMarkdown content={turn.assistant.content} citations={turn.assistant.citations} onCitation={onCitation} />
-                    <CitationList citations={turn.assistant.citations} onCitation={onCitation} />
-                  </div>
-                )}
+                <span className="message-avatar user-avatar" aria-hidden="true">S</span>
               </div>
-            </div>
-          )}
-        </article>
-      ))}
+            )}
+            {assistant && (
+              <div className="assistant-message-row">
+                <span className="message-avatar assistant-avatar" aria-hidden="true"><MessageSquareText size={16} /></span>
+                <div className="assistant-message-content">
+                  <div className="message-meta assistant-meta">
+                    <span>Sourcebook</span>
+                    <time dateTime={assistant.createdAt}>{formatDate(assistant.createdAt)}</time>
+                    {assistant.status === "completed" && <span className="saved-status"><CheckCircle2 size={12} aria-hidden="true" /> Saved</span>}
+                  </div>
+                  {assistant.status === "pending" && (
+                    <StreamingDraft reply={stream} />
+                  )}
+                  {assistant.status === "failed" && (
+                    <div className="failed-answer" role="alert">
+                      <AnswerProgress reply={stream} />
+                      <div className="failed-answer-title"><AlertCircle size={17} aria-hidden="true" /><strong>This answer could not be completed</strong></div>
+                      <p>{assistant.error?.message ?? "The server could not complete this turn."}</p>
+                      {turn.user && <Button variant="outline" size="sm" onClick={() => onRetry(turn.user!.content)} disabled={retryDisabled}><RotateCcw size={14} aria-hidden="true" /> Try again</Button>}
+                    </div>
+                  )}
+                  {assistant.status === "completed" && (
+                    <>
+                      <AnswerProgress reply={stream} />
+                      <CompletedAnswer message={assistant} onCitation={onCitation} />
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </article>
+        );
+      })}
       {showGeneratingTurn && generatingTurn && (
         <article className="message-turn">
           <div className="user-message-row">
@@ -147,7 +157,12 @@ export function MessageList({
             <span className="message-avatar assistant-avatar" aria-hidden="true"><MessageSquareText size={16} /></span>
             <div className="assistant-message-content">
               <div className="message-meta assistant-meta"><span>Sourcebook</span></div>
-              <PendingAnswer label="Searching your sources" />
+              {streams[generatingTurn.requestId]?.turn?.assistantMessage.status === "completed" ? (
+                <>
+                  <AnswerProgress reply={streams[generatingTurn.requestId]} />
+                  <CompletedAnswer message={streams[generatingTurn.requestId].turn!.assistantMessage} onCitation={onCitation} />
+                </>
+              ) : <StreamingDraft reply={streams[generatingTurn.requestId]} />}
             </div>
           </div>
         </article>

@@ -525,6 +525,39 @@ export type ChatInternalChatPostResponses = {
 
 export type ChatInternalChatPostResponse = ChatInternalChatPostResponses[keyof ChatInternalChatPostResponses];
 
+export type StreamChatInternalChatStreamPostData = {
+    body: ChatRequest;
+    path?: never;
+    query?: never;
+    url: '/internal/chat/stream';
+};
+
+export type StreamChatInternalChatStreamPostErrors = {
+    /**
+     * Invalid request or contract version
+     */
+    400: ErrorEnvelope;
+    /**
+     * Missing or invalid internal token
+     */
+    401: ErrorEnvelope;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StreamChatInternalChatStreamPostError = StreamChatInternalChatStreamPostErrors[keyof StreamChatInternalChatStreamPostErrors];
+
+export type StreamChatInternalChatStreamPostResponses = {
+    /**
+     * Progress, provisional answer deltas, final checked result or error
+     */
+    200: string;
+};
+
+export type StreamChatInternalChatStreamPostResponse = StreamChatInternalChatStreamPostResponses[keyof StreamChatInternalChatStreamPostResponses];
+
 export type EvaluationChatInternalEvaluationChatPostData = {
     body: ChatRequest;
     path?: never;

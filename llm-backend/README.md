@@ -223,7 +223,15 @@ Psycopg uses an async connection pool and registers pgvector for each connection
 
 OpenAPI is exported to `openapi.json` from the FastAPI app. No schema migrations or conversation persistence belong in this service.
 
-`conversationId` is an optional request field for trace correlation. Both internal evaluation endpoints expose vector, lexical, hybrid, reranked, neighbor and selected stages with scores and per-query hits. `POST /internal/evaluation/retrieval` uses the same token/snapshot checks and graph, skipping sufficiency, answer generation and claim checks. `rag-eval --retrieval-cases <cases.jsonl>` runs gold chunk-ID cases; `--offline` evaluates saved stage IDs, and `--trace-file <events.jsonl>` replays traces. Reports include Recall@5/10/20/50, MRR, NDCG for chunk-ID cases and final source coverage. The public chat response contains no trace or stage data.
+`POST /internal/chat/stream` accepts the same authenticated request and sends public
+stage progress, provisional answer deltas and the final checked response over SSE.
+OpenAI answer and repair calls use native streaming; only answer fields are decoded
+from structured JSON, and private reasoning is ignored. Other adapters keep buffered
+answers with live stage updates. Planning, support checks and review stay private.
+NestJS persists the checked result before completing the browser stream. See the
+[streaming contract](../docs/contracts/chat-streaming.md) for event shapes and deadlines.
+
+`conversationId` is an optional request field for trace correlation. Both internal evaluation endpoints expose vector, lexical, hybrid, reranked, neighbor and selected stages with scores and per-query hits. `POST /internal/evaluation/retrieval` uses the same token/snapshot checks and graph, skipping sufficiency, answer generation and claim checks. `rag-eval --retrieval-cases <cases.jsonl>` runs gold chunk-ID cases; `--offline` evaluates saved stage IDs, and `--trace-file <events.jsonl>` replays traces. Reports include Recall@5/10/20/50, MRR, NDCG for chunk-ID cases and final source coverage. Public REST chat contains no trace data; streaming chat exposes only the public progress summaries described above.
 
 ## Operations and blockers
 

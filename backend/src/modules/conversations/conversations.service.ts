@@ -8,6 +8,9 @@ import { decodeCursor, pageResult } from '../../common/pagination';
 import { ApiError, badRequest, conflict, notFound, unavailable } from '../../common/errors/api-error';
 import { InternalCitation, InternalChatResponse } from '../llm-client/contracts/chat.contract';
 import { LlmClientService } from '../llm-client/llm-client.service';
+import { LiveAnswerEvent } from '../llm-client/contracts/stream.contract';
+
+export type ConversationLiveEvent = LiveAnswerEvent | { type: 'accepted'; requestId: string };
 
 type Scope = { mode: 'all' } | { mode: 'selected'; documentIds: string[] };
 type SourceSnapshot = { documentId: string; generationId: string };
@@ -130,6 +133,7 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
     requestId: string,
     rawContent: string,
     requestHeaderId: string,
+    onEvent?: (event: ConversationLiveEvent) => Promise<void>,
   ): Promise<{ turn: PublicTurn; httpStatus: 200 | 202 }> {
     const content = rawContent.trim();
     if (!content || [...content].length > 8000) throw badRequest('Message content must be between 1 and 8000 characters.');
@@ -150,7 +154,8 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
     }
 
     try {
-      const response = await this.llm.chat({
+      if (onEvent) await onEvent({ type: 'accepted', requestId });
+      const input = {
         contractVersion: '1.1.0',
         requestId,
         conversationId,
@@ -158,7 +163,10 @@ export class ConversationsService implements OnModuleInit, OnApplicationShutdown
         history: created.history,
         sources: created.sources,
         retrievalMode: this.indexingArtifact().retrievalMode,
-      }, requestHeaderId);
+      } as const;
+      const response = onEvent
+        ? await this.llm.chatStream(input, requestHeaderId, onEvent)
+        : await this.llm.chat(input, requestHeaderId);
       const citationRows = await this.validateCitations(response, created.sources);
       await this.completeTurn(created.turnId, response, citationRows);
       return { turn: await this.getTurn(created.turnId), httpStatus: 200 };

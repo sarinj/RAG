@@ -13,6 +13,18 @@ pnpm dev
 
 Set `NEXT_PUBLIC_API_BASE_URL` to a browser-reachable NestJS URL ending in `/api`, for example `http://localhost:3001/api`. The app shows a configuration message when the value is missing or malformed. Only public configuration belongs in this variable.
 
+## Streaming chat
+
+New replies stream automatically, with an expandable log of source retrieval and
+answer checks. Provisional text is marked **Draft · checking sources** and replaced
+by the final saved answer and citations. Repairs can replace the draft. The progress
+panel shows public process summaries, without private chain of thought.
+
+Progress logs last for the current chat session (up to 50 requests); saved answers
+and citations survive reloads. Navigation cancels local consumption while accepted
+generation can finish on the server. Interrupted requests reconcile saved history
+before another attempt. See the [streaming contract](../docs/contracts/chat-streaming.md).
+
 ## API types and fixtures
 
 `pnpm generate:api` generates `src/generated/api.ts` from `../backend/openapi.json`. Document and chat API models derive from those generated DTOs. The current OpenAPI document emits several nullable scalar fields and the numeric pagination limit as empty objects; the frontend narrows those fields to the v1 contract shapes in its API modules. No fixture transport or fake document, ingestion, answer, or citation data is enabled.

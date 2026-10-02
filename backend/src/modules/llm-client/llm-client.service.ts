@@ -2,8 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ServerConfig } from '../../config/configuration';
 import { SERVER_CONFIG } from '../../config/tokens';
 import { ApiError, unavailable } from '../../common/errors/api-error';
+import { readServerEvents } from '../../common/sse';
 import { InternalChatRequest, InternalChatResponse, InternalChatResponseSchema } from './contracts/chat.contract';
 import { z } from 'zod';
+import { InternalStreamEventSchema, LiveAnswerEvent } from './contracts/stream.contract';
 
 const InternalReadyResponseSchema = z.object({ status: z.literal('ready') }).strict();
 
@@ -55,6 +57,55 @@ export class LlmClientService {
       return InternalReadyResponseSchema.safeParse(body).success;
     } catch {
       return false;
+    }
+  }
+
+  async chatStream(
+    request: InternalChatRequest,
+    requestHeaderId: string,
+    onEvent: (event: LiveAnswerEvent) => Promise<void>,
+  ): Promise<InternalChatResponse> {
+    if (!this.config.internalApiToken) {
+      throw unavailable('MODEL_UNAVAILABLE', 'The internal model service is not configured.');
+    }
+    try {
+      const response = await fetch(`${this.config.llmBaseUrl}/internal/chat/stream`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.config.internalApiToken}`,
+          'Content-Type': 'application/json', Accept: 'text/event-stream',
+          'X-Request-Id': requestHeaderId,
+        },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(this.config.internalTimeoutMs),
+      });
+      if (!response.ok) throw mapInternalError(response.status, await response.json().catch(() => undefined));
+      if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+        await response.body?.cancel().catch(() => undefined);
+        throw unavailable('MODEL_UNAVAILABLE', 'The answer stream is unavailable.');
+      }
+      for await (const raw of readServerEvents(response.body)) {
+        const parsed = InternalStreamEventSchema.safeParse(raw);
+        if (!parsed.success || parsed.data.requestId !== request.requestId) {
+          throw unavailable('MODEL_UNAVAILABLE', 'The model service returned an invalid stream event.');
+        }
+        const event = parsed.data;
+        if (event.type === 'error') throw mapInternalError(event.status, event);
+        if (event.type === 'result') {
+          if (event.response.requestId !== request.requestId) {
+            throw unavailable('MODEL_UNAVAILABLE', 'The model service returned a mismatched request ID.');
+          }
+          return event.response;
+        }
+        await onEvent(event);
+      }
+      throw unavailable('MODEL_UNAVAILABLE', 'The answer stream ended before completion.');
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+        throw new ApiError('GENERATION_TIMEOUT', 'The answer generation timed out.', 504);
+      }
+      throw unavailable('MODEL_UNAVAILABLE', 'The answer stream could not be completed.');
     }
   }
 }

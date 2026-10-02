@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from copy import deepcopy
 from typing import Any, cast
 
@@ -19,6 +20,7 @@ from rag_app.providers.models import (
     GenerationInput,
     GenerationOutput,
 )
+from rag_app.providers.protocols import TextSink
 
 
 def strict_response_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -135,7 +137,9 @@ class OpenAIProvider:
                 "Live embedding dimension differs from the reviewed index config"
             )
 
-    async def generate(self, request: GenerationInput) -> GenerationOutput:
+    def _generation_parameters(
+        self, request: GenerationInput
+    ) -> tuple[str, dict[str, Any], httpx.Timeout]:
         model = request.model or self._settings.generation_model
         if not model:
             raise ProviderModelMissing("Generation model is not configured")
@@ -174,6 +178,10 @@ class OpenAIProvider:
             write=self._settings.provider_write_timeout_seconds,
             pool=self._settings.provider_pool_timeout_seconds,
         )
+        return model, body, timeout
+
+    async def generate(self, request: GenerationInput) -> GenerationOutput:
+        model, body, timeout = self._generation_parameters(request)
         async with self._generation_gate:
             payload = await self._request(
                 "POST",
@@ -181,15 +189,120 @@ class OpenAIProvider:
                 timeout=timeout,
                 json=body,
             )
+        return self._parse_generation(payload, model)
+
+    async def generate_stream(
+        self, request: GenerationInput, on_text: TextSink
+    ) -> GenerationOutput:
+        model, body, timeout = self._generation_parameters(request)
+        body["stream"] = True
+        body["stream_options"] = {"include_usage": True}
+        fragments: list[str] = []
+        usage: dict[str, Any] = {}
+        finish_reason: str | None = None
+        completed = False
+        response_model = model
+        total_chars = 0
+        try:
+            async with self._generation_gate:
+                async with self._client.stream(
+                    "POST",
+                    "chat/completions",
+                    json=body,
+                    timeout=timeout,
+                    headers={"Accept": "text/event-stream"},
+                ) as response:
+                    if response.status_code == 404:
+                        raise ProviderModelMissing(
+                            "Configured OpenAI model or endpoint is unavailable"
+                        )
+                    response.raise_for_status()
+                    if "text/event-stream" not in response.headers.get("content-type", ""):
+                        raise ProviderProtocolError("OpenAI did not return an event stream")
+                    data_lines: list[str] = []
+                    async for line in response.aiter_lines():
+                        if line.startswith("data:"):
+                            data_lines.append(line[5:].lstrip(" "))
+                            if sum(len(item) for item in data_lines) > 262_144:
+                                raise ProviderProtocolError("OpenAI stream event exceeds the limit")
+                        elif not line and data_lines:
+                            data = "\n".join(data_lines)
+                            data_lines.clear()
+                            if data == "[DONE]":
+                                completed = True
+                                break
+                            try:
+                                raw_event = json.loads(data)
+                                if not isinstance(raw_event, dict):
+                                    raise ValueError("invalid chunk")
+                                event = cast(dict[str, Any], raw_event)
+                                choices = event.get("choices")
+                                if not isinstance(choices, list):
+                                    raise ValueError("invalid chunk")
+                                event_model = event.get("model")
+                                if isinstance(event_model, str):
+                                    response_model = event_model
+                                event_usage = event.get("usage")
+                                if isinstance(event_usage, dict):
+                                    usage = cast(dict[str, Any], event_usage)
+                                for raw_choice in cast(list[Any], choices):
+                                    if not isinstance(raw_choice, dict):
+                                        continue
+                                    choice = cast(dict[str, Any], raw_choice)
+                                    if choice.get("index", 0) != 0:
+                                        continue
+                                    choice_finish_reason = choice.get("finish_reason")
+                                    if isinstance(choice_finish_reason, str):
+                                        finish_reason = choice_finish_reason
+                                    delta = choice.get("delta", {})
+                                    content = (
+                                        cast(dict[str, Any], delta).get("content")
+                                        if isinstance(delta, dict)
+                                        else None
+                                    )
+                                    # Deliberately ignore reasoning/refusal/tool fields.
+                                    if isinstance(content, str) and content:
+                                        total_chars += len(content)
+                                        if total_chars > 262_144:
+                                            raise ProviderProtocolError(
+                                                "OpenAI streamed answer exceeds the limit"
+                                            )
+                                        fragments.append(content)
+                                        await on_text(content)
+                            except (ValueError, TypeError, KeyError) as exc:
+                                raise ProviderProtocolError(
+                                    "OpenAI returned an invalid stream event"
+                                ) from exc
+        except httpx.TimeoutException as exc:
+            raise ProviderTimeout("OpenAI stream timed out") from exc
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            raise ProviderError("OpenAI stream is unavailable") from exc
+        if not completed or finish_reason is None:
+            raise ProviderProtocolError("OpenAI stream ended before completion")
+        return self._parse_generation(
+            {
+                "model": response_model,
+                "choices": [
+                    {"message": {"content": "".join(fragments)}, "finish_reason": finish_reason}
+                ],
+                "usage": usage,
+            },
+            model,
+        )
+
+    @staticmethod
+    def _parse_generation(payload: dict[str, Any], model: str) -> GenerationOutput:
         try:
             choices = payload["choices"]
             if not isinstance(choices, list) or not choices:
                 raise ValueError("completion response has no choices")
             first_choice = cast(dict[str, Any], choices[0])
             message = first_choice["message"]
-            if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+            if not isinstance(message, dict):
                 raise ValueError("completion response has no text content")
             message = cast(dict[str, Any], message)
+            if not isinstance(message.get("content"), str):
+                raise ValueError("completion response has no text content")
             usage = payload.get("usage", {})
             usage = cast(dict[str, Any], usage) if isinstance(usage, dict) else {}
             completion_details = usage.get("completion_tokens_details", {})
@@ -233,19 +346,23 @@ class OpenAIProvider:
             )
         try:
             data = payload["data"]
-            if not isinstance(data, list) or len(data) != len(request.texts):
+            if not isinstance(data, list):
+                raise ValueError("embedding count differs from input count")
+            data = cast(list[Any], data)
+            if len(data) != len(request.texts):
                 raise ValueError("embedding count differs from input count")
             vectors_by_index: dict[int, list[float]] = {}
             for position, item in enumerate(data):
                 if not isinstance(item, dict):
                     raise ValueError("embedding item is invalid")
+                item = cast(dict[str, Any], item)
                 index = item.get("index", position)
                 vector = item.get("embedding")
                 if type(index) is not int or not isinstance(vector, list):
                     raise ValueError("embedding item is invalid")
                 if index < 0 or index >= len(request.texts) or index in vectors_by_index:
                     raise ValueError("embedding indexes are invalid")
-                vectors_by_index[index] = vector
+                vectors_by_index[index] = cast(list[float], vector)
             if set(vectors_by_index) != set(range(len(request.texts))):
                 raise ValueError("embedding indexes are incomplete")
             vectors = [vectors_by_index[index] for index in range(len(request.texts))]
@@ -263,11 +380,13 @@ class OpenAIProvider:
             data = payload["data"]
             if not isinstance(data, list):
                 raise ValueError("model list is invalid")
-            model_names = {
-                item["id"]
-                for item in data
-                if isinstance(item, dict) and isinstance(item.get("id"), str)
-            }
+            data = cast(list[Any], data)
+            model_names: set[str] = set()
+            for item in data:
+                if isinstance(item, dict):
+                    model_id = cast(dict[str, Any], item).get("id")
+                    if isinstance(model_id, str):
+                        model_names.add(model_id)
             if len(model_names) != len(data):
                 raise ValueError("model list contains invalid entries")
             return model_names

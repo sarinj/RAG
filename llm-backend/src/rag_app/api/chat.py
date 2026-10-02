@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Protocol, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 
 from rag_app.api.dependencies import require_internal_token
 from rag_app.errors import (
@@ -16,6 +19,7 @@ from rag_app.errors import (
     ProviderTimeout,
     ServiceError,
 )
+from rag_app.generation.streaming import ChatStream, active_stream, progress
 from rag_app.models import (
     CONTRACT_VERSION,
     ChatRequest,
@@ -79,6 +83,85 @@ async def chat(
 ) -> ChatResponse:
     result = await _execute_chat(payload, request)
     return result.response
+
+
+@router.post(
+    "/internal/chat/stream",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            "description": "Progress, provisional answer deltas, final checked result or error",
+        },
+        400: {"model": ErrorEnvelope, "description": "Invalid request or contract version"},
+        401: {"model": ErrorEnvelope, "description": "Missing or invalid internal token"},
+    },
+    summary="Stream public progress and a provisional answer, followed by the checked result",
+)
+async def stream_chat(
+    payload: ChatRequest,
+    request: Request,
+    _principal: None = Depends(require_internal_token),
+) -> StreamingResponse:
+    if payload.contract_version != CONTRACT_VERSION:
+        raise ServiceError(
+            400, "CONTRACT_VERSION_MISMATCH", "Unsupported internal contract version"
+        )
+
+    async def events():
+        queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue(maxsize=64)
+
+        async def execute() -> None:
+            stream = ChatStream(payload.request_id, queue.put)
+            token = active_stream.set(stream)
+            try:
+                result = await _execute_chat(payload, request)
+                await stream.emit(
+                    "result", response=result.response.model_dump(mode="json", by_alias=True)
+                )
+            except ServiceError as exc:
+                await stream.emit(
+                    "error", code=exc.code, message=exc.message, status=exc.status_code
+                )
+            except Exception:
+                # Never publish provider exceptions, prompts or private reasoning.
+                await stream.emit(
+                    "error",
+                    code="MODEL_UNAVAILABLE",
+                    message="The answer could not be completed.",
+                    status=503,
+                )
+            finally:
+                active_stream.reset(token)
+                with suppress(asyncio.QueueFull):
+                    queue.put_nowait(None)
+
+        task = asyncio.create_task(execute())
+        try:
+            while True:
+                if task.done() and queue.empty():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=10)
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event, ensure_ascii=True, separators=(',', ':'))}\n\n"
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post(
@@ -224,6 +307,7 @@ async def _execute_chat_impl(
             "INTERNAL_CONTRACT_ERROR",
             "Generation returned a mismatched request ID",
         )
+    await progress("finalization", "active")
     with trace.measure("citation_validation"):
         allowed_sources = {(source.document_id, source.generation_id) for source in payload.sources}
         if any(
@@ -239,4 +323,5 @@ async def _execute_chat_impl(
                 "Answer citations do not match retrieved evidence",
             )
         trace.fields["citation_validation"] = "valid"
+    await progress("finalization", "complete")
     return result

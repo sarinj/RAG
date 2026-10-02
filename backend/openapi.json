@@ -1410,6 +1410,172 @@
         ]
       }
     },
+    "/api/conversations/{id}/messages/stream": {
+      "post": {
+        "description": "SSE data frames have types accepted, progress, answer_reset, answer_delta, done or error. Done contains the saved turn; a duplicate request can replay a pending or failed turn. Completed answers have passed source checks. Progress describes source work, not private model reasoning. Disconnected clients reconcile through saved history; an accepted turn keeps running within its deadline.",
+        "operationId": "ConversationsController_streamMessage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SSE stream; done follows persistence, error is terminal.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid question or request ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "value": {
+                      "code": "VALIDATION_ERROR",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "value": {
+                      "code": "NOT_FOUND",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request conflict, pending turn, invalid scope, or index mismatch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "NO_READY_DOCUMENTS": {
+                    "value": {
+                      "code": "NO_READY_DOCUMENTS",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  },
+                  "DOCUMENT_NOT_READY": {
+                    "value": {
+                      "code": "DOCUMENT_NOT_READY",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  },
+                  "REQUEST_ID_CONFLICT": {
+                    "value": {
+                      "code": "REQUEST_ID_CONFLICT",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  },
+                  "TURN_IN_PROGRESS": {
+                    "value": {
+                      "code": "TURN_IN_PROGRESS",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  },
+                  "INDEX_CONFIG_MISMATCH": {
+                    "value": {
+                      "code": "INDEX_CONFIG_MISMATCH",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "value": {
+                      "code": "INTERNAL_ERROR",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "MODEL_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "MODEL_UNAVAILABLE": {
+                    "value": {
+                      "code": "MODEL_UNAVAILABLE",
+                      "message": "Request failed.",
+                      "requestId": "00000000-0000-4000-8000-000000000000"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream an idempotent chat turn with public progress and provisional answer text",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "HealthController_live",

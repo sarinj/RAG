@@ -1005,6 +1005,72 @@
         ]
       }
     },
+    "/internal/chat/stream": {
+      "post": {
+        "operationId": "stream_chat_internal_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Progress, provisional answer deltas, final checked result or error"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request or contract version"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid internal token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "InternalBearer": []
+          }
+        ],
+        "summary": "Stream public progress and a provisional answer, followed by the checked result",
+        "tags": [
+          "internal chat"
+        ]
+      }
+    },
     "/internal/evaluation/chat": {
       "post": {
         "operationId": "evaluation_chat_internal_evaluation_chat_post",

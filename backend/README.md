@@ -18,4 +18,11 @@ Run `npm run build` before `npm run migration:run` after PostgreSQL with pgvecto
 - Deletion commits a tombstone and cancels active work before returning. A periodic cleanup pass removes the file, chunks, jobs, and generations while retaining the tombstone, conversation links, and citation identifiers.
 - Chat calls Python synchronously with a 130-second default timeout. Turn recovery marks requests past their 180-second expiry failed. A citation is persisted only after the referenced original chunk is resolved inside that turn's document snapshot.
 
+`POST /api/conversations/:id/messages/stream` accepts the same idempotent chat body
+and sends SSE progress and provisional answer deltas. Its final `done` event contains
+the saved turn after source checks and persistence. An accepted turn keeps running
+if the viewer disconnects; reconcile through saved history. Duplicate requests replay
+their saved status without starting another generation. See the
+[streaming contract](../docs/contracts/chat-streaming.md) for events and error handling.
+
 The LLM service, a real model configuration artifact, PostgreSQL with pgvector, root Compose wiring, and cross-service integration fixtures are separate dependencies. Until they are supplied, the backend can build and export OpenAPI, but migrations and readiness cannot complete.

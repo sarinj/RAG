@@ -3,7 +3,7 @@
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import React, { isValidElement, type ReactElement, type ReactNode } from "react";
+import React, { isValidElement, memo, type ReactElement, type ReactNode } from "react";
 import { Citation } from "../api";
 
 function withCitationMarkers(node: ReactNode, citations: Map<string, Citation>, onCitation: (citation: Citation) => void): ReactNode {
@@ -36,7 +36,7 @@ function withCitationMarkers(node: ReactNode, citations: Map<string, Citation>, 
   return node;
 }
 
-export function AnswerMarkdown({ content, citations, onCitation }: {
+export const AnswerMarkdown = memo(function AnswerMarkdown({ content, citations, onCitation }: {
   content: string;
   citations: Citation[];
   onCitation: (citation: Citation) => void;
@@ -70,4 +70,4 @@ export function AnswerMarkdown({ content, citations, onCitation }: {
       </ReactMarkdown>
     </div>
   );
-}
+});

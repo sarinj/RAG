@@ -3,7 +3,7 @@
 import { AlertCircle, ArrowLeft, BookOpenText, LoaderCircle, Plus, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiConfigNotice, ErrorNotice, LoadingState } from "@/components/ui/feedback";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { useSendMessage } from "../mutations";
 import { chatKeys, useConversation, useConversationMessages } from "../queries";
 import { Citation, ConversationRecord, MessageRecord, listMessages } from "../api";
 import { createTurnRequest } from "../request-id";
+import { newStreamReply, updateStreamReply, type StreamReply } from "../streaming";
 import { CitationDrawer } from "./citation-drawer";
 import { MessageComposer } from "./message-composer";
 import { MessageList } from "./message-list";
@@ -116,6 +117,18 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
   const [reconciliation, setReconciliation] = useState<Reconciliation | null>(null);
   const [isCheckingHistory, setIsCheckingHistory] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [streams, setStreams] = useState<Record<string, StreamReply>>({});
+  const activeRequest = useRef<AbortController | null>(null);
+  const scrollArea = useRef<HTMLDivElement | null>(null);
+  const followReply = useRef(true);
+
+  useEffect(() => () => activeRequest.current?.abort(), [conversationId]);
+
+  useEffect(() => {
+    if (followReply.current && scrollArea.current) {
+      scrollArea.current.scrollTop = scrollArea.current.scrollHeight;
+    }
+  }, [streams, messages, generatingTurn]);
 
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage && !isHistoryError) {
@@ -143,6 +156,7 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
     try {
       const found = await updateHistory(attempt.requestId, false);
       if (found) {
+        setGeneratingTurn((previous) => previous?.requestId === attempt.requestId ? null : previous);
         setReconciliation(null);
         setSendError(null);
       } else {
@@ -162,10 +176,18 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
   }, [updateHistory]);
 
   const sendQuestion = useCallback(async (content: string, afterReconciliation = false) => {
-    if (pendingTurn || sendMutation.isPending) return;
+    if (activeRequest.current || pendingTurn || sendMutation.isPending) return;
     if (reconciliation && !afterReconciliation) return;
     const request = createTurnRequest(content);
     const requestId = request.requestId;
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    followReply.current = true;
+    let acceptedByApi = false;
+    setStreams((previous) => ({
+      ...Object.fromEntries(Object.entries(previous).slice(-49)),
+      [requestId]: newStreamReply(),
+    }));
     setGeneratingTurn({ requestId, content, createdAt: new Date().toISOString() });
     const attempt: Reconciliation = {
       requestId,
@@ -179,11 +201,23 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
     setReconciliation(null);
 
     try {
-      await sendMutation.mutateAsync(request);
+      await sendMutation.mutateAsync({
+        ...request,
+        signal: controller.signal,
+        onEvent: (event) => {
+          if (controller.signal.aborted) return;
+          if (event.type === "accepted" || event.type === "done") acceptedByApi = true;
+          setStreams((previous) => ({
+            ...previous,
+            [requestId]: updateStreamReply(previous[requestId] ?? newStreamReply(), event),
+          }));
+        },
+      });
+      if (controller.signal.aborted) return;
       try {
         const found = await updateHistory(requestId, true);
-        setGeneratingTurn(null);
         if (found) {
+          setGeneratingTurn(null);
           setReconciliation(null);
           setSendError(null);
         } else {
@@ -196,7 +230,6 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
           });
         }
       } catch {
-        setGeneratingTurn(null);
         setReconciliation({
           ...attempt,
           state: "unavailable",
@@ -206,12 +239,17 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
         });
       }
     } catch (error) {
+      if (controller.signal.aborted) return;
       setGeneratingTurn(null);
       const message = apiErrorMessage(error);
       setSendError(message);
       const errorCode = error instanceof ApiError ? error.code : undefined;
       const canRetryAfterReconciliation = !isDefinitiveClientError(error) || errorCode === "TURN_IN_PROGRESS";
-      const failedAttempt = { ...attempt, allowNewAttempt: canRetryAfterReconciliation };
+      setStreams((previous) => ({
+        ...previous,
+        [requestId]: { ...(previous[requestId] ?? newStreamReply()), status: "error", draft: "", latestMessage: message },
+      }));
+      const failedAttempt = { ...attempt, acceptedByApi, allowNewAttempt: canRetryAfterReconciliation && !acceptedByApi };
       setReconciliation({ ...failedAttempt, state: "checking", message: "The request outcome is unclear. Checking saved history first." });
       try {
         const found = await updateHistory(requestId, false);
@@ -224,6 +262,8 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
             state: "not-found",
             message: errorCode === "TURN_IN_PROGRESS"
               ? "Another turn is already saved in this conversation. Wait for its reply to finish, then send this question as a new attempt."
+              : acceptedByApi
+              ? "The API accepted this turn. Keep checking saved history before sending another question."
               : canRetryAfterReconciliation
               ? "The full saved history does not contain this request. You can deliberately create a fresh attempt with a new request ID."
               : `${message} The server did not save this turn, so resolve the error before trying again.`,
@@ -232,6 +272,8 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
       } catch {
         setReconciliation({ ...failedAttempt, state: "unavailable", message: "Saved history could not be checked. Refresh the connection and check again before sending another attempt." });
       }
+    } finally {
+      if (activeRequest.current === controller) activeRequest.current = null;
     }
   }, [pendingTurn, reconciliation, sendMutation, updateHistory]);
 
@@ -270,11 +312,15 @@ export function ChatWorkspace({ conversationId }: { conversationId: string }) {
           <div className="scope-immutable-note"><ShieldCheck size={14} aria-hidden="true" /><span>This conversation is fixed to <strong>{scopeDescription(conversationQuery.data.scope)}</strong>.</span><Link href="/chat">Start a new chat to change the scope</Link></div>
 
           <section className="chat-panel" aria-label={`Conversation: ${title}`}>
-            <div className="chat-scroll-area">
+            <div className="chat-scroll-area" ref={scrollArea} onScroll={(event) => {
+              const element = event.currentTarget;
+              followReply.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+            }}>
               {messagesQuery.isError && <ErrorNotice error={messagesQuery.error} title="Saved messages couldn’t load" onRetry={() => void messagesQuery.refetch()} />}
               <MessageList
                 messages={messages}
                 generatingTurn={generatingTurn}
+                streams={streams}
                 isLoading={(messagesQuery.isPending || messagesQuery.isFetchingNextPage) && isApiConfigured()}
                 hasNextPage={Boolean(messagesQuery.hasNextPage)}
                 isFetchingNextPage={messagesQuery.isFetchingNextPage}

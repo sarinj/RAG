@@ -39,6 +39,7 @@ from rag_app.generation.query_rewriting import (
     understand_request,
 )
 from rag_app.generation.reranking import rerank_candidates
+from rag_app.generation.streaming import generate_answer, progress
 from rag_app.models import (
     ChatRequest,
     ChatResponse,
@@ -118,11 +119,11 @@ class BaselineChatExecutor:
         graph.add_node("prepare", self._prepare)
         graph.add_node("understand", self._observed(self._understand, "planner"))
         graph.add_node("direct_answer", self._direct_answer)
-        graph.add_node("retrieve", self._retrieve)
+        graph.add_node("retrieve", self._observed(self._retrieve, "retrieval"))
         graph.add_node(
             "corpus_evidence", self._observed(self._corpus_evidence, "corpus_processing")
         )
-        graph.add_node("multi_hop", self._multi_hop)
+        graph.add_node("multi_hop", self._observed(self._multi_hop, "multi_hop"))
         graph.add_node("rerank", self._observed(self._rerank, "reranking"))
         graph.add_node("neighbors", self._observed(self._neighbors, "neighbor_expansion"))
         graph.add_node(
@@ -131,7 +132,7 @@ class BaselineChatExecutor:
         graph.add_node("insufficient_evidence", self._insufficient_evidence_node)
         graph.add_node("sufficiency", self._observed(self._sufficiency, "evidence_sufficiency"))
         graph.add_node("generate", self._observed(self._generate, "generation"))
-        graph.add_node("repair", self._observed(self._repair, "generation"))
+        graph.add_node("repair", self._observed(self._repair, "generation", "repair"))
         graph.add_node("finalize", self._finalize)
         graph.add_edge(cast(Any, START), "prepare")
         graph.add_edge("prepare", "understand")
@@ -253,13 +254,28 @@ class BaselineChatExecutor:
                 result.diagnostics.timings_ms.update(trace.timings_ms)
 
     @staticmethod
-    def _observed(handler: Callable[[ChatGraphState], Any], stage: str) -> Callable[..., Any]:
+    def _observed(
+        handler: Callable[[ChatGraphState], Any], stage: str, public_stage: str | None = None
+    ) -> Callable[..., Any]:
         async def run(state: ChatGraphState) -> dict[str, Any]:
+            visible_stage = public_stage or stage
+            await progress(visible_stage, "active")
             with state["trace"].measure(stage):
                 result = handler(state)
                 if inspect.isawaitable(result):
                     result = await result
-                return cast(dict[str, Any], result)
+            result = cast(dict[str, Any], result)
+            message = None
+            if visible_stage == "evidence_selection":
+                selected = result.get("selected", state["selected"])
+                count = len(selected)
+                documents = len({item.document_id for item in selected})
+                message = (
+                    f"Using {count} passage{'s' if count != 1 else ''} from "
+                    f"{documents} document{'s' if documents != 1 else ''}"
+                )
+            await progress(visible_stage, "complete", message)
+            return result
 
         return run
 
@@ -791,6 +807,7 @@ class BaselineChatExecutor:
         structured = answer_claims(generation.response, state["selected"])
         if structured is None:
             return None
+        await progress("claim_validation", "active")
         with state["trace"].measure("claim_validation"):
             checked = await validate_claim_support(
                 self._provider,
@@ -805,6 +822,11 @@ class BaselineChatExecutor:
                 query=state["retrieval_query"],
                 model=self._settings.rag_quality_model,
             )
+        await progress(
+            "claim_validation",
+            "complete" if checked.valid else "skipped",
+            None if checked.valid else "The draft needs a source correction",
+        )
         state["trace"].fields.setdefault("claim_validation", []).append(
             {
                 "valid": checked.valid,
@@ -878,7 +900,7 @@ class BaselineChatExecutor:
             reasoning_token_budget=self._settings.rag_answer_reasoning_token_budget,
             verbosity="low",
         )
-        generation = await self._provider.generate(generation_request)
+        generation = await generate_answer(self._provider, generation_request)
         state["trace"].generation("generation", generation_request, generation)
         self._check_complete_output(state, generation)
         parsed = await self._validate_generation(state, generation)
@@ -931,6 +953,7 @@ class BaselineChatExecutor:
         )
         if rendered is None or rendered.answer != response.answer:
             return None
+        await progress("answer_review", "active")
         try:
             with state["trace"].measure("answer_review"):
                 async with asyncio.timeout(20):
@@ -950,6 +973,11 @@ class BaselineChatExecutor:
                     )
         except (ProviderError, TimeoutError):
             review, status = None, "provider_error_or_timeout"
+        await progress(
+            "answer_review",
+            "complete" if review is not None else "skipped",
+            None if review is not None else "Keeping the source-checked draft",
+        )
         state["trace"].fields.setdefault("answer_review", []).append(
             {
                 "status": status,
@@ -1114,7 +1142,7 @@ class BaselineChatExecutor:
             reasoning_token_budget=self._settings.rag_answer_reasoning_token_budget,
             verbosity="low",
         )
-        generation = await self._provider.generate(generation_request)
+        generation = await generate_answer(self._provider, generation_request)
         state["trace"].generation("repair", generation_request, generation)
         self._check_complete_output(state, generation)
         parsed = await self._validate_generation(state, generation)

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createConversation, sendMessage } from "./api";
+import { createConversation } from "./api";
+import { sendMessageStream, type StreamMessageInput } from "./streaming";
 import { chatKeys } from "./queries";
 
 export function useCreateConversation() {
@@ -16,7 +17,7 @@ export function useCreateConversation() {
 export function useSendMessage(conversationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { requestId: string; content: string }) => sendMessage(conversationId, input),
+    mutationFn: (input: StreamMessageInput) => sendMessageStream(conversationId, input),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: chatKeys.messages(conversationId) }),

@@ -42,6 +42,14 @@ export function addContractErrors(document: OpenAPIObject): OpenAPIObject {
         '504': ['GENERATION_TIMEOUT'], '500': ['INTERNAL_ERROR'],
       },
     },
+    '/api/conversations/{id}/messages/stream': {
+      post: {
+        '400': ['VALIDATION_ERROR'], '404': ['NOT_FOUND'],
+        '409': ['NO_READY_DOCUMENTS', 'DOCUMENT_NOT_READY', 'REQUEST_ID_CONFLICT', 'TURN_IN_PROGRESS', 'INDEX_CONFIG_MISMATCH'],
+        '503': ['MODEL_UNAVAILABLE'],
+        '500': ['INTERNAL_ERROR'],
+      },
+    },
     '/health/ready': { get: { '503': ['MODEL_UNAVAILABLE'] } },
   };
   for (const [pathName, path] of Object.entries(document.paths)) {

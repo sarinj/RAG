@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from rag_app.config import IndexConfiguration
@@ -9,6 +10,14 @@ from rag_app.providers.models import (
     GenerationInput,
     GenerationOutput,
 )
+
+TextSink = Callable[[str], Awaitable[None]]
+
+
+class StreamingGenerationProvider(Protocol):
+    async def generate_stream(
+        self, request: GenerationInput, on_text: TextSink
+    ) -> GenerationOutput: ...
 
 
 class LLMProvider(Protocol):

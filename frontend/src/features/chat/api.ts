@@ -10,7 +10,10 @@ export type Scope = Schemas["CreateConversationDto"]["scope"];
 export type Citation = Omit<Schemas["CitationDto"], keyof CitationLocation> & CitationLocation;
 export type ConversationRecord = Omit<Schemas["ConversationDto"], "scope"> & { scope: Scope };
 export type MessageRecord = Omit<Schemas["MessageDto"], "citations"> & { citations: Citation[] };
-export type Turn = Schemas["TurnDto"];
+export type Turn = Omit<Schemas["TurnDto"], "userMessage" | "assistantMessage"> & {
+  userMessage: MessageRecord;
+  assistantMessage: MessageRecord;
+};
 export type SourceRecord = Omit<Schemas["SourceDto"], keyof CitationLocation> & CitationLocation;
 
 export async function listConversations(params: { limit: number; cursor: string | null }) {
