@@ -27,6 +27,7 @@ _STAGES = (
     "evidence_sufficiency",
     "generation",
     "claim_validation",
+    "answer_review",
     "citation_validation",
     "total",
 )
@@ -76,6 +77,7 @@ class RagTrace:
                 "model": output.model,
                 "reasoning_effort": request.reasoning_effort,
                 "reasoning_token_budget": request.reasoning_token_budget,
+                "verbosity": request.verbosity,
                 "max_output_tokens": request.max_output_tokens,
                 "structured_output": request.response_schema is not None,
                 "finish_reason": output.done_reason,

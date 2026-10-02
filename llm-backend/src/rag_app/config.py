@@ -52,6 +52,10 @@ class RagSettings(BaseSettings):
     rag_evidence_token_budget: int | None = Field(default=None, ge=1)
     rag_sufficiency_check_enabled: bool = True
     rag_claim_validation_enabled: bool = True
+    rag_answer_review_enabled: bool = False
+    rag_answer_review_max_output_tokens: int = Field(default=3072, ge=128, le=4096)
+    rag_answer_review_reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low"
+    rag_quality_model: NonEmptyString | None = None
     rag_claim_validation_max_batches: int = Field(default=8, ge=1, le=16)
     rag_grounding_reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low"
     rag_grounding_max_output_tokens: int = Field(default=1024, ge=128, le=4096)
@@ -69,9 +73,9 @@ class RagSettings(BaseSettings):
             raise ValueError("text tracing requires explicit RAG_DEBUG_MODE=true")
         return self
 
-    @field_validator("rag_evidence_token_budget", mode="before")
+    @field_validator("rag_evidence_token_budget", "rag_quality_model", mode="before")
     @classmethod
-    def normalize_evidence_budget(cls, value: object) -> object:
+    def normalize_optional_rag_values(cls, value: object) -> object:
         return None if value == "" else value
 
 
@@ -155,6 +159,11 @@ class Settings(RagSettings):
         if self.database_pool_min_size > self.database_pool_max_size:
             raise ValueError("database pool minimum cannot exceed its maximum")
         return self
+
+    @property
+    def required_generation_models(self) -> tuple[str, ...]:
+        models = [self.generation_model, self.rag_quality_model]
+        return tuple(dict.fromkeys(model for model in models if model is not None))
 
     @property
     def database_dsn(self) -> str | None:

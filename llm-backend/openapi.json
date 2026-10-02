@@ -353,6 +353,9 @@
                   "type": "integer"
                 },
                 {
+                  "type": "string"
+                },
+                {
                   "type": "boolean"
                 },
                 {

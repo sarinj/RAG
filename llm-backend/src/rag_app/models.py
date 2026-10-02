@@ -140,8 +140,8 @@ class QueryDiagnostics(WireModel):
     evidence_sufficiency: EvidenceSufficiency | None = None
     timings_ms: dict[str, float] = Field(default_factory=lambda: dict[str, float]())
     retrieval_only: bool = False
-    configuration: dict[str, int | bool | None] = Field(
-        default_factory=lambda: dict[str, int | bool | None]()
+    configuration: dict[str, int | str | bool | None] = Field(
+        default_factory=lambda: dict[str, int | str | bool | None]()
     )
 
 

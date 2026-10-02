@@ -102,7 +102,8 @@ class OpenAIProvider:
         generation_model = self._settings.generation_model
         if not generation_model:
             raise ProviderModelMissing("Generation model is not configured")
-        if generation_model not in await self._list_models():
+        available = await self._list_models()
+        if any(model not in available for model in self._settings.required_generation_models):
             raise ProviderModelMissing("Configured generation model is not available")
 
     async def check_embedding_readiness(self, config: IndexConfiguration) -> None:
@@ -135,7 +136,7 @@ class OpenAIProvider:
             )
 
     async def generate(self, request: GenerationInput) -> GenerationOutput:
-        model = self._settings.generation_model
+        model = request.model or self._settings.generation_model
         if not model:
             raise ProviderModelMissing("Generation model is not configured")
 
@@ -153,6 +154,8 @@ class OpenAIProvider:
             body["reasoning_effort"] = "minimal"
         elif request.temperature is not None and not model.startswith("gpt-5"):
             body["temperature"] = request.temperature
+        if request.verbosity is not None and model.startswith("gpt-5"):
+            body["verbosity"] = request.verbosity
         if request.response_schema is not None:
             body["response_format"] = {
                 "type": "json_schema",

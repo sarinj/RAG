@@ -10,6 +10,7 @@ class GenerationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     prompt: StrictStr = Field(min_length=1)
+    model: StrictStr | None = Field(default=None, min_length=1)
     context_window_tokens: StrictInt | None = Field(default=None, gt=0)
     max_output_tokens: StrictInt = Field(default=512, gt=0)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -18,6 +19,7 @@ class GenerationInput(BaseModel):
     response_schema: dict[str, Any] | None = None
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
     reasoning_token_budget: StrictInt = Field(default=0, ge=0, le=4096)
+    verbosity: Literal["low", "medium", "high"] | None = None
 
 
 class GenerationOutput(BaseModel):

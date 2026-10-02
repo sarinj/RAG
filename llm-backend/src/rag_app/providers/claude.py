@@ -53,11 +53,12 @@ class ClaudeProvider:
             raise ProviderModelMissing("Generation model is not configured")
         if not self._client.headers.get("x-api-key"):
             raise ProviderError("Claude API key is not configured")
-        if model not in await self._list_models():
+        available = await self._list_models()
+        if any(name not in available for name in self._settings.required_generation_models):
             raise ProviderModelMissing("Configured Claude model is not available")
 
     async def generate(self, request: GenerationInput) -> GenerationOutput:
-        model = self._settings.generation_model
+        model = request.model or self._settings.generation_model
         if not model:
             raise ProviderModelMissing("Generation model is not configured")
 

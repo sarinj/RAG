@@ -91,9 +91,11 @@ class OllamaProvider:
         generation_name = self._settings.generation_model
         if not generation_name:
             raise ProviderModelMissing("Generation model is not configured")
-        model = find_model(await self.list_models(), generation_name)
-        if not model.digest:
-            raise ProviderProtocolError("Generation model digest is missing")
+        available = await self.list_models()
+        for name in self._settings.required_generation_models:
+            model = find_model(available, name)
+            if not model.digest:
+                raise ProviderProtocolError("Generation model digest is missing")
 
     async def check_embedding_readiness(self, config: IndexConfiguration) -> None:
         if not self._settings.embedding_model:
@@ -132,7 +134,8 @@ class OllamaProvider:
             raise ProviderProtocolError("Ollama returned invalid model information") from exc
 
     async def generate(self, request: GenerationInput) -> GenerationOutput:
-        if not self._settings.generation_model:
+        model = request.model or self._settings.generation_model
+        if not model:
             raise ProviderModelMissing("Generation model is not configured")
         options: dict[str, int | float] = {"num_predict": request.max_output_tokens}
         if request.context_window_tokens is not None:
@@ -146,7 +149,7 @@ class OllamaProvider:
             pool=self._settings.provider_pool_timeout_seconds,
         )
         body: dict[str, Any] = {
-            "model": self._settings.generation_model,
+            "model": model,
             "prompt": request.prompt,
             "stream": False,
             "options": options,

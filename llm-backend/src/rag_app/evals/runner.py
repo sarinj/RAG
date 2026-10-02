@@ -164,6 +164,7 @@ async def run_evaluation(args: argparse.Namespace) -> int:
             "provider": settings.llm_provider,
             "embeddingProvider": settings.active_embedding_provider,
             "generationModel": settings.generation_model,
+            "qualityModel": settings.rag_quality_model or settings.generation_model,
             "retrievalMode": retrieval_mode,
             **index_identifiers,
         },
@@ -767,6 +768,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"Duration: {report['durationSeconds']} seconds",
         f"Provider: `{configuration['provider']}`",
         f"Generation model: `{configuration['generationModel']}`",
+        "Answer quality model: "
+        f"`{configuration.get('qualityModel', configuration['generationModel'])}`",
         f"Retrieval mode: `{configuration['retrievalMode']}`",
         (
             "Context indexing: `contextual`"

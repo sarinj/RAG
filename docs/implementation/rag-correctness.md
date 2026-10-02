@@ -44,7 +44,8 @@ flowchart TD
     F --> L
     L --> M[Supported claim generation or insufficient-evidence response]
     M --> N[Selected-source ID checks and original-source support validation]
-    N --> O[At most one answer repair]
+    N --> Q[Bounded answer completeness and relevance review]
+    Q --> O[At most one answer repair, with support and review rechecked]
     O --> P[Public answer and original chunk citations]
 ```
 
@@ -104,6 +105,10 @@ include these settings. They do not belong in the immutable shared indexing arti
 | `RAG_EVIDENCE_TOKEN_BUDGET` | unset / blank | Optional cap on original source tokens, in addition to the full prompt limit |
 | `RAG_SUFFICIENCY_CHECK_ENABLED` | `true` | One bounded coverage judgment before generation |
 | `RAG_CLAIM_VALIDATION_ENABLED` | `true` | Require structured claims and validate support against originals |
+| `RAG_ANSWER_REVIEW_ENABLED` | `false` | Review supported structured answers for material omissions and irrelevant claims; uses the existing one repair |
+| `RAG_ANSWER_REVIEW_MAX_OUTPUT_TOKENS` | `3072` | Total review completion budget, including hidden reasoning; range 128–4096 |
+| `RAG_ANSWER_REVIEW_REASONING_EFFORT` | `low` | Optional review reasoning effort; minimal, low, medium or high |
+| `RAG_QUALITY_MODEL` | unset / blank | Optional model on the same generation provider for evidence assessment, grounded answers, support checks, review and repair |
 | `RAG_CLAIM_VALIDATION_MAX_BATCHES` | `8` | Maximum support batches per answer attempt, range 1–16 |
 | `RAG_GROUNDING_REASONING_EFFORT` | `low` | Per-call reasoning effort for sufficiency and claim validation |
 | `RAG_GROUNDING_MAX_OUTPUT_TOKENS` | `1024` | Total grounding completion budget, including hidden reasoning; range 128–4096 |
@@ -127,6 +132,25 @@ at most one generation repair and one additional bounded support pass. A support
 answer gets one bounded coverage reconciliation against the originals and validated draft.
 Only verified missing aspects receive a specific note, scoped to the supplied evidence.
 An insufficient result keeps the existing uncited response shape.
+
+The optional answer review receives the selected originals after claim support validation.
+It identifies material omissions and irrelevant claims, then privately supplies feedback to
+the single repair. Every missing-fact quotation must match its selected original source;
+irrelevant claim IDs must be valid and unique. Feedback does not authorize facts or replace
+claim support. Each review has a 20-second limit. Invalid, truncated, context-limited or
+unavailable review preserves the supported draft. An unsupported repair, a repair with more
+reviewed issues, or an unavailable follow-up review also preserves that draft. The trace
+records review statuses and issue counts without quotations; there is no further repair loop.
+
+Review budgets also count against the context window. Model overrides apply only to the
+answer steps and are validated during readiness. A blank quality model preserves the shared
+generation model. The evaluated OpenAI quality preset selects `gpt-5` for those steps while
+`gpt-5-nano` performs planning and ranking. It enables review and sets the answer reasoning
+reserve to 2048. OpenAI GPT-5 answer and repair calls request low verbosity. Answers name
+the subject, preserve material qualifications and briefly derive calculated values; explicit
+requests for explanation or detail still apply. See the
+[answer-quality evaluation](rag-answer-quality-2026-10-02.md) for measured results and
+tradeoffs. These controls do not change the embedding space.
 
 OpenAI grounding and answer calls use native JSON schemas plus local validation. JSON
 object mode alone does not guarantee schema adherence; see the official

@@ -68,7 +68,9 @@ class HuggingFaceProvider:
             raise ProviderModelMissing("Generation model is not configured")
         self._require_api_key()
         models = await self._list_models()
-        if self._model_id(model) not in models:
+        if any(
+            self._model_id(name) not in models for name in self._settings.required_generation_models
+        ):
             raise ProviderModelMissing("Configured Hugging Face chat model is not available")
 
     async def check_embedding_readiness(self, config: IndexConfiguration) -> None:
@@ -94,7 +96,7 @@ class HuggingFaceProvider:
             )
 
     async def generate(self, request: GenerationInput) -> GenerationOutput:
-        model = self._settings.generation_model
+        model = request.model or self._settings.generation_model
         if not model:
             raise ProviderModelMissing("Generation model is not configured")
         body: dict[str, Any] = {

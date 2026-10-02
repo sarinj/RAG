@@ -33,6 +33,37 @@ The sufficiency provider returns a coverage enum and missing aspects; applicatio
 the `answerable` boolean. Sufficiency and claim checks receive explicit JSON schemas. Invalid
 outputs remain rejected, and traces include schema error types/locations without source text.
 
+Optional answer review checks completeness and relevance after claim support. The writer,
+support checker and reviewer receive the selected original sources. Missing-fact feedback must
+quote those originals exactly, allowing whitespace normalization, and name a selected source
+label. Irrelevant-claim feedback must name valid claim IDs. Feedback can guide the existing
+single repair; repaired answers still need valid citations and source support. An invalid,
+unavailable or timed-out review keeps the supported draft. A repair with more reviewed issues,
+or without a valid follow-up review, also retains that draft. Each review has a 20-second limit.
+
+`RAG_ANSWER_REVIEW_ENABLED` defaults to `false`. The review's default completion budget is
+3072 tokens, including hidden reasoning, with `RAG_ANSWER_REVIEW_REASONING_EFFORT=low`.
+That budget is reserved in the context window when review is enabled. `RAG_QUALITY_MODEL`
+optionally selects a model on the same provider connection for evidence assessment, grounded
+answers, claim validation, review and repair. Planning, retrieval ranking and ingestion use
+`GENERATION_MODEL`. Leave the quality model blank to share that model. Readiness checks both
+configured models; traces record the actual model, and live reports include `qualityModel`.
+
+The evaluated OpenAI quality preset is:
+
+```dotenv
+GENERATION_MODEL=gpt-5-nano
+RAG_QUALITY_MODEL=gpt-5
+RAG_ANSWER_REVIEW_ENABLED=true
+RAG_ANSWER_REASONING_TOKEN_BUDGET=2048
+```
+
+This preset increases API cost and response latency. It uses the existing embeddings and
+indexes. See the [answer-quality evaluation](../docs/implementation/rag-answer-quality-2026-10-02.md)
+for the measured comparison and limitations. OpenAI GPT-5 answer and repair calls request low
+verbosity. Answers retain material conditions and exceptions, use short sentences naming the
+subject, and show a brief derivation for calculations; explicit requests for detail still apply.
+
 ## Setup
 
 Install [uv](https://docs.astral.sh/uv/), copy `.env.example` to `.env`, then set `DATABASE_URL`, `INTERNAL_API_TOKEN`, `LLM_PROVIDER`, `GENERATION_MODEL`, `EMBEDDING_MODEL`, `INDEX_CONFIG_PATH`, `TOKENIZER_PATH`, and `UPLOAD_DIR`. Supported generation providers are `ollama`, `openai`, `claude`, `gemini`, and `huggingface`. Embeddings can use `ollama`, `openai`, `gemini`, or `huggingface`. By default, the embedding provider follows `LLM_PROVIDER`; Claude defaults to Ollama because Anthropic does not offer an embedding model. Set `EMBEDDING_PROVIDER` to choose another embedding backend. The index configuration must be the reviewed artifact shared with NestJS; do not create independent Python defaults.

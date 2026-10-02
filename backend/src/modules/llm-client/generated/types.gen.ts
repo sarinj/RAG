@@ -199,7 +199,7 @@ export type QueryDiagnostics = {
      * Configuration
      */
     configuration?: {
-        [key: string]: number | boolean | null;
+        [key: string]: number | string | boolean | null;
     };
     /**
      * Corpuschunkcount

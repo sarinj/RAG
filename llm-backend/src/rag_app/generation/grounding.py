@@ -92,6 +92,7 @@ async def assess_sufficiency(
     reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low",
     max_output_tokens: int = 1024,
     supported_answer: str | None = None,
+    model: str | None = None,
 ) -> tuple[EvidenceSufficiency, str]:
     insufficient = EvidenceSufficiency(answerable=False, coverage=EvidenceCoverage.INSUFFICIENT)
     if not evidence:
@@ -140,6 +141,7 @@ async def assess_sufficiency(
         return insufficient, "context_limit"
     request = GenerationInput(
         prompt=prompt,
+        model=model,
         context_window_tokens=config.context_window_tokens,
         max_output_tokens=output_tokens,
         temperature=0,
@@ -195,6 +197,8 @@ async def validate_claim_support(
     reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low",
     max_output_tokens: int = 1024,
     question: str | None = None,
+    query: str | None = None,
+    model: str | None = None,
 ) -> ClaimCheck:
     allowed = {item.chunk.id: item for item in evidence}
     if any(not set(claim.source_chunk_ids) <= allowed.keys() for claim in claims):
@@ -264,6 +268,8 @@ async def validate_claim_support(
             "A calculation using a source rule and an explicitly given question input is "
             "supported; check the calculation and preserve its conditional meaning.\n"
             f"User question: {json.dumps(question, ensure_ascii=False)}\n"
+            "Resolved topic (reference context only, not evidence): "
+            f"{json.dumps(query, ensure_ascii=False)}\n"
             f"Claims: {json.dumps(data, ensure_ascii=False, separators=(',', ':'))}\n"
             f"Original sources: {json.dumps(sources, ensure_ascii=False, separators=(',', ':'))}"
         )
@@ -289,6 +295,7 @@ async def validate_claim_support(
     for batch_index, indexes in enumerate(batches, 1):
         request = GenerationInput(
             prompt=render(indexes),
+            model=model,
             context_window_tokens=config.context_window_tokens,
             max_output_tokens=output_tokens,
             temperature=0,

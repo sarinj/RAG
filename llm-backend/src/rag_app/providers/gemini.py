@@ -68,7 +68,10 @@ class GeminiProvider:
             raise ProviderModelMissing("Generation model is not configured")
         self._require_api_key()
         available = await self._list_models()
-        if "generateContent" not in available.get(self._model_name(model), set()):
+        if any(
+            "generateContent" not in available.get(self._model_name(name), set())
+            for name in self._settings.required_generation_models
+        ):
             raise ProviderModelMissing("Configured Gemini generation model is not available")
 
     async def check_embedding_readiness(self, config: IndexConfiguration) -> None:
@@ -88,7 +91,7 @@ class GeminiProvider:
             )
 
     async def generate(self, request: GenerationInput) -> GenerationOutput:
-        model = self._settings.generation_model
+        model = request.model or self._settings.generation_model
         if not model:
             raise ProviderModelMissing("Generation model is not configured")
         body: dict[str, Any] = {
